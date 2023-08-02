@@ -49,6 +49,7 @@ header nav ul li a {
 .hero-content {
   max-width: 600px;
   margin: 0 auto;
+  color: black;
 }
 
 .hero h1 {
