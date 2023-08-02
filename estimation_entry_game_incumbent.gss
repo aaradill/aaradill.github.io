@@ -1,0 +1,2739 @@
+rndseed 3623875;
+
+tinit=hsec;
+
+players=3;
+
+load data[1250,18]=datos_accesos_municipios_variables_economicas.csv;
+
+/*
+VARIABLES:
+1: YEAR
+2: CODIGO MUNICIPIO
+3: TOTAL ACCESOS POR MUNICIPIO
+4-14: MARKET SHARES POR MUNICIPIO (once columnas, ver orden de los grupos. AMX:2 (columna 5), TELEVISA:4 (columna 7), MEGACABLE:6 (columna 9), TOTALPLAY:8 (columna 11))
+15: UNIDADES ECONOMICAS (INEGI)
+16: PRODUCCION BRUTA TOTAL (INEGI)
+17: POBLACION TOTAL (INEGI)
+18: DENSIDAD DE POBLACION
+*/
+
+data=selif(data, data[.,1] .eq 2020);
+
+data=selif(data, data[.,5] .le 0.90);
+
+data=selif(data, data[.,5] .ge 0.10);
+
+
+
+
+
+n=rows(data);
+
+year=data[.,1];
+market=data[.,2];
+accesos=data[.,3];
+share_incumbent_market=data[.,5];
+number_entrants_market=(data[.,7] .gt 0)+(data[.,9] .gt 0)+(data[.,11] .gt 0);
+unidades_economicas=data[.,15];
+produccion_bruta=data[.,16];
+poblacion=data[.,17];
+densidad=data[.,18];
+
+gdp_percap=(produccion_bruta)./poblacion;
+
+unidades_percap=(unidades_economicas)./poblacion;
+
+X1=ones(n,1);
+X2=(poblacion/1000000);
+X3=(densidad/100000);
+X4=unidades_percap;
+X5=gdp_percap;
+
+
+X_covariates=X1~X2~X3~X4~X5;
+
+
+k_covar=cols(X_covariates);
+
+
+library optmum;
+optset;
+
+__output=0;
+_opmiter=5000;
+_opgtol=(10^-4)*1;
+
+BNE_steps=15;
+
+
+gammma_U=12;
+delta_U=12;
+capital_delta_U=12;
+
+sigma_gammma=20;
+sigma_delta=20;
+sigma_cap_delta=20;
+s=10;
+
+
+proc GMM_criterion(b);
+local P, sm, c, betas, gammma, delta, capital_delta, eta, zetta, i, t0;
+local BNE_pais, BNE_conditions, pai_0, pai_new, k;
+local nabla_mu_pi, mu, index_mu, index_t, index_t_BNE, G_index_t_BNE, q;
+local F_pai, nabla_pi_F, pai_k, mu_new, index_t_new, BNE_system;
+local F_Y, covars, probab_entry;
+local maximum_number_BNE;
+local residual, instruments, moments, Q_gmm; 
+local additional_instruments, iii;
+
+P=players;
+F_Y=zeros(n,1);
+    
+maximum_number_BNE=1;
+
+betas=b[1:k_covar];
+gammma=gammma_U*exp(b[k_covar+1]/sigma_gammma)/(1+exp(b[k_covar+1]/sigma_gammma));
+delta=delta_U*exp(b[k_covar+2]/sigma_delta)/(1+exp(b[k_covar+2]/sigma_delta));
+capital_delta=capital_delta_U*exp(b[k_covar+3]/sigma_cap_delta)/(1+exp(b[k_covar+3]/sigma_cap_delta));
+eta=b[k_covar+4];
+zetta=eta*gammma;
+
+i=1;
+do while i .le n;
+
+sm=share_incumbent_market[i];
+c=number_entrants_market[i];
+covars=X_covariates[i,.];
+
+t0=covars*betas;
+
+
+
+/*We search for "maximum_number_BNE" BNE*/
+BNE_pais=zeros(maximum_number_BNE,1);
+BNE_conditions=zeros(maximum_number_BNE,1);
+index_t_BNE=zeros(maximum_number_BNE,1);
+G_index_t_BNE=zeros(maximum_number_BNE,1);
+
+
+pai_0=0.5;
+
+pai_new=pai_0;
+
+
+k=1;
+do while k .le BNE_steps;
+    
+if k .eq 1;
+pai_k=pai_0;
+else;
+pai_k=pai_new;
+endif;    
+
+
+nabla_mu_pi=0;
+mu=0;
+
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+nabla_mu_pi=nabla_mu_pi+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*((q/pai_k)-(P-1-q)/(1-pai_k))*exp(index_mu)/(1+exp(index_mu));
+mu=mu+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t=t0-delta*mu-capital_delta*(P-1)*pai_k+eta*ln(sm/(1-sm))+zetta*c;
+
+F_pai=exp(index_t)/(1+exp(index_t));
+nabla_pi_F=1-exp(index_t)/((1+exp(index_t))^2)*(-delta*nabla_mu_pi-capital_delta*(P-1));
+
+pai_new=pai_k-(1/nabla_pi_F)*(pai_k-F_pai);
+
+q=0;
+mu_new=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+mu_new=mu_new+((P-1)!/((P-1-q)!*q!))*(pai_new^q)*((1-pai_new)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t_new=t0-delta*mu_new-capital_delta*(P-1)*pai_new+eta*ln(sm/(1-sm))+zetta*c;
+
+BNE_system=abs(pai_new-exp(index_t_new)/(1+exp(index_t_new)));
+
+k=k+1;
+endo;
+
+BNE_pais=pai_new;
+BNE_conditions=BNE_system;
+index_t_BNE=index_t_new;
+G_index_t_BNE=exp(index_t_new)/(1+exp(index_t_new));
+
+
+probab_entry=G_index_t_BNE;
+
+F_Y[i]=probab_entry;
+
+
+i=i+1;
+
+endo;
+
+residual=number_entrants_market-P*F_Y;
+
+additional_instruments=
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X3)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X4)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X5)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X3.*X4)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X3.*X5)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X4.*X5)+gammma*number_entrants_market);
+
+
+instruments=
+X_covariates~exp(additional_instruments/s)./(1+exp(additional_instruments/s));
+
+
+
+moments=meanc((instruments).*(residual));
+
+Q_gmm=(moments')*moments;
+
+
+retp(Q_gmm);
+endp;
+
+
+
+
+proc GMM_moments(b);
+local P, sm, c, betas, gammma, delta, capital_delta, eta, zetta, i, t0;
+local BNE_pais, BNE_conditions, pai_0, pai_new, k;
+local nabla_mu_pi, mu, index_mu, index_t, index_t_BNE, G_index_t_BNE, q;
+local F_pai, nabla_pi_F, pai_k, mu_new, index_t_new, BNE_system;
+local F_Y, covars, probab_entry;
+local maximum_number_BNE;
+local residual, instruments, moments; 
+local additional_instruments, iii;
+
+P=players;
+F_Y=zeros(n,1);
+    
+maximum_number_BNE=1;
+
+betas=b[1:k_covar];
+gammma=gammma_U*exp(b[k_covar+1]/sigma_gammma)/(1+exp(b[k_covar+1]/sigma_gammma));
+delta=delta_U*exp(b[k_covar+2]/sigma_delta)/(1+exp(b[k_covar+2]/sigma_delta));
+capital_delta=capital_delta_U*exp(b[k_covar+3]/sigma_cap_delta)/(1+exp(b[k_covar+3]/sigma_cap_delta));
+eta=b[k_covar+4];
+zetta=eta*gammma;
+
+i=1;
+do while i .le n;
+
+sm=share_incumbent_market[i];
+c=number_entrants_market[i];
+covars=X_covariates[i,.];
+
+t0=covars*betas;
+
+
+
+/*We search for "maximum_number_BNE" BNE*/
+BNE_pais=zeros(maximum_number_BNE,1);
+BNE_conditions=zeros(maximum_number_BNE,1);
+index_t_BNE=zeros(maximum_number_BNE,1);
+G_index_t_BNE=zeros(maximum_number_BNE,1);
+
+pai_0=0.5;
+
+
+pai_new=pai_0;
+
+
+k=1;
+do while k .le BNE_steps;
+    
+if k .eq 1;
+pai_k=pai_0;
+else;
+pai_k=pai_new;
+endif;    
+
+
+nabla_mu_pi=0;
+mu=0;
+
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+nabla_mu_pi=nabla_mu_pi+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*((q/pai_k)-(P-1-q)/(1-pai_k))*exp(index_mu)/(1+exp(index_mu));
+mu=mu+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t=t0-delta*mu-capital_delta*(P-1)*pai_k+eta*ln(sm/(1-sm))+zetta*c;
+
+F_pai=exp(index_t)/(1+exp(index_t));
+nabla_pi_F=1-exp(index_t)/((1+exp(index_t))^2)*(-delta*nabla_mu_pi-capital_delta*(P-1));
+
+pai_new=pai_k-(1/nabla_pi_F)*(pai_k-F_pai);
+
+q=0;
+mu_new=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+mu_new=mu_new+((P-1)!/((P-1-q)!*q!))*(pai_new^q)*((1-pai_new)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t_new=t0-delta*mu_new-capital_delta*(P-1)*pai_new+eta*ln(sm/(1-sm))+zetta*c;
+
+BNE_system=abs(pai_new-exp(index_t_new)/(1+exp(index_t_new)));
+
+k=k+1;
+endo;
+
+BNE_pais=pai_new;
+BNE_conditions=BNE_system;
+index_t_BNE=index_t_new;
+G_index_t_BNE=exp(index_t_new)/(1+exp(index_t_new));
+
+
+
+probab_entry=G_index_t_BNE;
+
+F_Y[i]=probab_entry;
+
+
+i=i+1;
+
+endo;
+
+residual=number_entrants_market-P*F_Y;
+
+
+additional_instruments=
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X3)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X4)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X5)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X3.*X4)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X3.*X5)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X4.*X5)+gammma*number_entrants_market);
+
+
+instruments=
+X_covariates~exp(additional_instruments/s)./(1+exp(additional_instruments/s));
+
+
+moments=meanc((instruments).*(number_entrants_market-P*F_Y));
+
+retp(moments);
+endp;
+
+
+
+proc analytical_Jacobian_moments(b);
+local P, sm, c, betas, gammma, delta, capital_delta, eta, zetta, i, j, t0;
+local BNE_pais, BNE_conditions, pai_0, pai_new, k;
+local nabla_mu_pi, mu, index_mu, index_t, index_t_BNE, G_index_t_BNE, little_g_index_t_BNE, q;
+local F_pai, nabla_pi_F, pai_k, mu_new, index_t_new, BNE_system;
+local F_Y, covars, probab_entry;
+local maximum_number_BNE;
+local residual, instruments, moments, Q_gmm; 
+local additional_instruments;
+local nabla_mu_pi_aux,  nabla_mu_gamma_aux; 
+local nabla_sigma_pi, nabla_mu_pi_vector, nabla_mu_gamma_vector, lambda_1_vector, lambda_2_vector;
+local mu_S_aux, pi_star_BNE_vector, mu_S_vector, F_epsilon_vector;
+local D_gammma, D_delta, D_capital_delta;
+local D_instruments_gammma;
+local variables_jacobian, jacobian_i, jacobian, aux_jacobian_gammma;   
+
+P=players;
+F_Y=zeros(n,1);
+nabla_mu_pi_vector=zeros(n,1);
+nabla_mu_gamma_vector=zeros(n,1);
+lambda_1_vector=zeros(n,1);
+lambda_2_vector=zeros(n,1);   
+mu_S_vector=zeros(n,1);
+pi_star_BNE_vector=zeros(n,1);
+F_epsilon_vector=zeros(n,1);
+    
+maximum_number_BNE=1;
+
+betas=b[1:k_covar];
+gammma=gammma_U*exp(b[k_covar+1]/sigma_gammma)/(1+exp(b[k_covar+1]/sigma_gammma));
+delta=delta_U*exp(b[k_covar+2]/sigma_delta)/(1+exp(b[k_covar+2]/sigma_delta));
+capital_delta=capital_delta_U*exp(b[k_covar+3]/sigma_cap_delta)/(1+exp(b[k_covar+3]/sigma_cap_delta));
+eta=b[k_covar+4];
+zetta=eta*gammma;
+
+
+D_gammma=(gammma_U/sigma_gammma)*exp(b[k_covar+1]/sigma_gammma)/((1+exp(b[k_covar+1]/sigma_gammma))^2);
+D_delta=(delta_U/sigma_delta)*exp(b[k_covar+2]/sigma_delta)/((1+exp(b[k_covar+2]/sigma_delta))^2);
+D_capital_delta=(capital_delta_U/sigma_cap_delta)*exp(b[k_covar+3]/sigma_cap_delta)/((1+exp(b[k_covar+3]/sigma_cap_delta))^2);
+
+i=1;
+do while i .le n;
+
+sm=share_incumbent_market[i];
+c=number_entrants_market[i];
+covars=X_covariates[i,.];
+
+t0=covars*betas;
+
+
+
+/*We search for "maximum_number_BNE" BNE*/
+BNE_pais=zeros(maximum_number_BNE,1);
+BNE_conditions=zeros(maximum_number_BNE,1);
+index_t_BNE=zeros(maximum_number_BNE,1);
+G_index_t_BNE=zeros(maximum_number_BNE,1);
+
+
+pai_0=0.5;
+
+pai_new=pai_0;
+
+
+k=1;
+do while k .le BNE_steps;
+    
+if k .eq 1;
+pai_k=pai_0;
+else;
+pai_k=pai_new;
+endif;    
+
+
+nabla_mu_pi=0;
+mu=0;
+
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+nabla_mu_pi=nabla_mu_pi+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*((q/pai_k)-(P-1-q)/(1-pai_k))*exp(index_mu)/(1+exp(index_mu));
+mu=mu+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t=t0-delta*mu-capital_delta*(P-1)*pai_k+eta*ln(sm/(1-sm))+zetta*c;
+
+F_pai=exp(index_t)/(1+exp(index_t));
+nabla_pi_F=1-exp(index_t)/((1+exp(index_t))^2)*(-delta*nabla_mu_pi-capital_delta*(P-1));
+
+pai_new=pai_k-(1/nabla_pi_F)*(pai_k-F_pai);
+
+q=0;
+mu_new=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+mu_new=mu_new+((P-1)!/((P-1-q)!*q!))*(pai_new^q)*((1-pai_new)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t_new=t0-delta*mu_new-capital_delta*(P-1)*pai_new+eta*ln(sm/(1-sm))+zetta*c;
+
+BNE_system=abs(pai_new-exp(index_t_new)/(1+exp(index_t_new)));
+
+k=k+1;
+endo;
+
+BNE_pais=pai_new;
+BNE_conditions=BNE_system;
+index_t_BNE=index_t_new;
+G_index_t_BNE=exp(index_t_new)/(1+exp(index_t_new));
+little_g_index_t_BNE=exp(index_t_new)/((1+exp(index_t_new))^2);
+
+probab_entry=G_index_t_BNE;
+
+
+nabla_mu_pi_aux=0;
+nabla_mu_gamma_aux=0;
+
+q=0;
+do while q .le P-1;
+    
+    nabla_sigma_pi=(P-1)!/((P-1-q)!*q!)*(P-1)*(BNE_pais^q)*((1-BNE_pais)^(P-1-q))/(BNE_pais*(1-BNE_pais))*(q/(P-1)-BNE_pais);
+    index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));
+    nabla_mu_pi_aux=nabla_mu_pi_aux+nabla_sigma_pi*exp(index_mu)/(1+exp(index_mu));
+    nabla_mu_gamma_aux=nabla_mu_gamma_aux+((P-1)!/((P-1-q)!*q!))*(BNE_pais^q)*((1-BNE_pais)^(P-1-q))*exp(index_mu)/((1+exp(index_mu))^2)*(c-(q+1));
+    
+q=q+1;
+endo;
+
+nabla_mu_pi_vector[i]=nabla_mu_pi_aux;
+nabla_mu_gamma_vector[i]=nabla_mu_gamma_aux;
+
+lambda_1_vector[i]=little_g_index_t_BNE/(1+little_g_index_t_BNE*(delta*nabla_mu_pi_aux+capital_delta*(P-1)));
+
+lambda_2_vector[i]=little_g_index_t_BNE*(1-lambda_1_vector[i]*(delta*nabla_mu_pi_aux+capital_delta*(P-1)));
+
+
+F_Y[i]=probab_entry;
+
+
+mu_S_aux=0;
+q=0;
+do while q .le P-1;
+   index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));
+   mu_S_aux=mu_S_aux+((P-1)!/((P-1-q)!*q!))*(BNE_pais^q)*((1-BNE_pais)^(P-1-q))*exp(index_mu)/(1+exp(index_mu)); 
+q=q+1;
+endo;    
+
+mu_S_vector[i]=mu_S_aux;
+pi_star_BNE_vector[i]=BNE_pais;
+F_epsilon_vector[i]=probab_entry;
+
+i=i+1;
+
+endo;
+
+residual=number_entrants_market-P*F_Y;
+
+
+additional_instruments=
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X3)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X4)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X5)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X3.*X4)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X3.*X5)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X4.*X5)+gammma*number_entrants_market);
+
+
+instruments=
+X_covariates~exp(additional_instruments/s)./(1+exp(additional_instruments/s));
+
+D_instruments_gammma=
+zeros(n,cols(X_covariates))~(exp(additional_instruments/s)./((1+exp(additional_instruments/s))^2)).*(number_entrants_market/s)*D_gammma;
+    
+
+
+variables_jacobian=
+-(X_covariates~(-delta*nabla_mu_gamma_vector+eta*number_entrants_market)*D_gammma~(-mu_S_vector)*D_delta~(-(players-1).*pi_star_BNE_vector)*D_capital_delta~(ln(share_incumbent_market./(1-share_incumbent_market))+gammma*number_entrants_market)).*(lambda_2_vector).*players;
+
+
+jacobian=zeros(cols(instruments),rows(b));
+
+aux_jacobian_gammma=zeros(1,cols(X_covariates))~1~zeros(1,3);
+
+i=1;
+do while i .le n;
+jacobian_i=zeros(cols(instruments),rows(b));
+    
+j=1;
+do while j .le cols(instruments);
+jacobian_i[j,.]=variables_jacobian[i,.]*instruments[i,j]+D_instruments_gammma[i,j]*residual[i];
+j=j+1;
+endo;
+
+jacobian=jacobian+jacobian_i;
+
+i=i+1;
+endo;
+
+jacobian=jacobian/n;
+
+
+retp(jacobian);
+endp;
+
+
+
+proc Variance_GMM_moments(b);
+local P, sm, c, betas, gammma, delta, capital_delta, eta, zetta, i, t0;
+local BNE_pais, BNE_conditions, pai_0, pai_new, k;
+local nabla_mu_pi, mu, index_mu, index_t, index_t_BNE, G_index_t_BNE, q;
+local F_pai, nabla_pi_F, pai_k, mu_new, index_t_new, BNE_system;
+local F_Y, covars, probab_entry;
+local maximum_number_BNE;
+local residual, instruments, Omega_matrix; 
+local additional_instruments, iii;
+
+
+P=players;
+F_Y=zeros(n,1);
+    
+maximum_number_BNE=1;
+
+betas=b[1:k_covar];
+gammma=gammma_U*exp(b[k_covar+1]/sigma_gammma)/(1+exp(b[k_covar+1]/sigma_gammma));
+delta=delta_U*exp(b[k_covar+2]/sigma_delta)/(1+exp(b[k_covar+2]/sigma_delta));
+capital_delta=capital_delta_U*exp(b[k_covar+3]/sigma_cap_delta)/(1+exp(b[k_covar+3]/sigma_cap_delta));
+eta=b[k_covar+4];
+zetta=eta*gammma;
+
+i=1;
+do while i .le n;
+
+sm=share_incumbent_market[i];
+c=number_entrants_market[i];
+covars=X_covariates[i,.];
+
+t0=covars*betas;
+
+
+
+/*We search for "maximum_number_BNE" BNE*/
+BNE_pais=zeros(maximum_number_BNE,1);
+BNE_conditions=zeros(maximum_number_BNE,1);
+index_t_BNE=zeros(maximum_number_BNE,1);
+G_index_t_BNE=zeros(maximum_number_BNE,1);
+
+pai_0=0.5;
+
+pai_new=pai_0;
+
+
+k=1;
+do while k .le BNE_steps;
+    
+if k .eq 1;
+pai_k=pai_0;
+else;
+pai_k=pai_new;
+endif;    
+
+
+nabla_mu_pi=0;
+mu=0;
+
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+nabla_mu_pi=nabla_mu_pi+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*((q/pai_k)-(P-1-q)/(1-pai_k))*exp(index_mu)/(1+exp(index_mu));
+mu=mu+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t=t0-delta*mu-capital_delta*(P-1)*pai_k+eta*ln(sm/(1-sm))+zetta*c;
+
+F_pai=exp(index_t)/(1+exp(index_t));
+nabla_pi_F=1-exp(index_t)/((1+exp(index_t))^2)*(-delta*nabla_mu_pi-capital_delta*(P-1));
+
+pai_new=pai_k-(1/nabla_pi_F)*(pai_k-F_pai);
+
+q=0;
+mu_new=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+mu_new=mu_new+((P-1)!/((P-1-q)!*q!))*(pai_new^q)*((1-pai_new)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t_new=t0-delta*mu_new-capital_delta*(P-1)*pai_new+eta*ln(sm/(1-sm))+zetta*c;
+
+BNE_system=abs(pai_new-exp(index_t_new)/(1+exp(index_t_new)));
+
+k=k+1;
+endo;
+
+BNE_pais=pai_new;
+BNE_conditions=BNE_system;
+index_t_BNE=index_t_new;
+G_index_t_BNE=exp(index_t_new)/(1+exp(index_t_new));
+
+
+probab_entry=G_index_t_BNE;
+
+F_Y[i]=probab_entry;
+
+
+i=i+1;
+
+endo;
+
+residual=number_entrants_market-P*F_Y;
+
+
+
+additional_instruments=
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X3)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X4)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X5)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X3.*X4)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X3.*X5)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X4.*X5)+gammma*number_entrants_market);
+
+
+instruments=
+X_covariates~exp(additional_instruments/s)./(1+exp(additional_instruments/s));
+
+
+Omega_matrix=zeros(cols(instruments),cols(instruments));
+
+i=1;
+do while i .le n;
+    Omega_matrix=Omega_matrix+(instruments[i,.]'*residual[i])*(instruments[i,.]*residual[i]);
+i=i+1;
+endo;    
+
+Omega_matrix=(1/n)*Omega_matrix;    
+
+retp(Omega_matrix);
+endp;
+
+
+
+
+proc analytical_gradient_GMM(b);
+local P, sm, c, betas, gammma, delta, capital_delta, eta, zetta, i, j, t0;
+local BNE_pais, BNE_conditions, pai_0, pai_new, k;
+local nabla_mu_pi, mu, index_mu, index_t, index_t_BNE, G_index_t_BNE, little_g_index_t_BNE, q;
+local F_pai, nabla_pi_F, pai_k, mu_new, index_t_new, BNE_system;
+local F_Y, covars, probab_entry;
+local maximum_number_BNE;
+local residual, instruments, moments, Q_gmm; 
+local additional_instruments;
+local nabla_mu_pi_aux,  nabla_mu_gamma_aux; 
+local nabla_sigma_pi, nabla_mu_pi_vector, nabla_mu_gamma_vector, lambda_1_vector, lambda_2_vector;
+local mu_S_aux, pi_star_BNE_vector, mu_S_vector, F_epsilon_vector;
+local D_gammma, D_delta, D_capital_delta;
+local D_instruments_gammma;
+local variables_jacobian, jacobian_i, jacobian, aux_jacobian_gammma;   
+local gradient;    
+
+P=players;
+F_Y=zeros(n,1);
+nabla_mu_pi_vector=zeros(n,1);
+nabla_mu_gamma_vector=zeros(n,1);
+lambda_1_vector=zeros(n,1);
+lambda_2_vector=zeros(n,1);   
+mu_S_vector=zeros(n,1);
+pi_star_BNE_vector=zeros(n,1);
+F_epsilon_vector=zeros(n,1);
+    
+maximum_number_BNE=1;
+
+betas=b[1:k_covar];
+gammma=gammma_U*exp(b[k_covar+1]/sigma_gammma)/(1+exp(b[k_covar+1]/sigma_gammma));
+delta=delta_U*exp(b[k_covar+2]/sigma_delta)/(1+exp(b[k_covar+2]/sigma_delta));
+capital_delta=capital_delta_U*exp(b[k_covar+3]/sigma_cap_delta)/(1+exp(b[k_covar+3]/sigma_cap_delta));
+eta=b[k_covar+4];
+zetta=eta*gammma;
+
+
+D_gammma=(gammma_U/sigma_gammma)*exp(b[k_covar+1]/sigma_gammma)/((1+exp(b[k_covar+1]/sigma_gammma))^2);
+D_delta=(delta_U/sigma_delta)*exp(b[k_covar+2]/sigma_delta)/((1+exp(b[k_covar+2]/sigma_delta))^2);
+D_capital_delta=(capital_delta_U/sigma_cap_delta)*exp(b[k_covar+3]/sigma_cap_delta)/((1+exp(b[k_covar+3]/sigma_cap_delta))^2);
+
+i=1;
+do while i .le n;
+
+sm=share_incumbent_market[i];
+c=number_entrants_market[i];
+covars=X_covariates[i,.];
+
+t0=covars*betas;
+
+
+
+/*We search for "maximum_number_BNE" BNE*/
+BNE_pais=zeros(maximum_number_BNE,1);
+BNE_conditions=zeros(maximum_number_BNE,1);
+index_t_BNE=zeros(maximum_number_BNE,1);
+G_index_t_BNE=zeros(maximum_number_BNE,1);
+
+
+pai_0=0.5;
+
+pai_new=pai_0;
+
+
+k=1;
+do while k .le BNE_steps;
+    
+if k .eq 1;
+pai_k=pai_0;
+else;
+pai_k=pai_new;
+endif;    
+
+
+nabla_mu_pi=0;
+mu=0;
+
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+nabla_mu_pi=nabla_mu_pi+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*((q/pai_k)-(P-1-q)/(1-pai_k))*exp(index_mu)/(1+exp(index_mu));
+mu=mu+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t=t0-delta*mu-capital_delta*(P-1)*pai_k+eta*ln(sm/(1-sm))+zetta*c;
+
+F_pai=exp(index_t)/(1+exp(index_t));
+nabla_pi_F=1-exp(index_t)/((1+exp(index_t))^2)*(-delta*nabla_mu_pi-capital_delta*(P-1));
+
+pai_new=pai_k-(1/nabla_pi_F)*(pai_k-F_pai);
+
+q=0;
+mu_new=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+mu_new=mu_new+((P-1)!/((P-1-q)!*q!))*(pai_new^q)*((1-pai_new)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t_new=t0-delta*mu_new-capital_delta*(P-1)*pai_new+eta*ln(sm/(1-sm))+zetta*c;
+
+BNE_system=abs(pai_new-exp(index_t_new)/(1+exp(index_t_new)));
+
+k=k+1;
+endo;
+
+BNE_pais=pai_new;
+BNE_conditions=BNE_system;
+index_t_BNE=index_t_new;
+G_index_t_BNE=exp(index_t_new)/(1+exp(index_t_new));
+little_g_index_t_BNE=exp(index_t_new)/((1+exp(index_t_new))^2);
+
+probab_entry=G_index_t_BNE;
+
+
+nabla_mu_pi_aux=0;
+nabla_mu_gamma_aux=0;
+
+q=0;
+do while q .le P-1;
+    
+    nabla_sigma_pi=(P-1)!/((P-1-q)!*q!)*(P-1)*(BNE_pais^q)*((1-BNE_pais)^(P-1-q))/(BNE_pais*(1-BNE_pais))*(q/(P-1)-BNE_pais);
+    index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));
+    nabla_mu_pi_aux=nabla_mu_pi_aux+nabla_sigma_pi*exp(index_mu)/(1+exp(index_mu));
+    nabla_mu_gamma_aux=nabla_mu_gamma_aux+((P-1)!/((P-1-q)!*q!))*(BNE_pais^q)*((1-BNE_pais)^(P-1-q))*exp(index_mu)/((1+exp(index_mu))^2)*(c-(q+1));
+    
+q=q+1;
+endo;
+
+nabla_mu_pi_vector[i]=nabla_mu_pi_aux;
+nabla_mu_gamma_vector[i]=nabla_mu_gamma_aux;
+
+lambda_1_vector[i]=little_g_index_t_BNE/(1+little_g_index_t_BNE*(delta*nabla_mu_pi_aux+capital_delta*(P-1)));
+
+lambda_2_vector[i]=little_g_index_t_BNE*(1-lambda_1_vector[i]*(delta*nabla_mu_pi_aux+capital_delta*(P-1)));
+
+
+F_Y[i]=probab_entry;
+
+
+mu_S_aux=0;
+q=0;
+do while q .le P-1;
+   index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));
+   mu_S_aux=mu_S_aux+((P-1)!/((P-1-q)!*q!))*(BNE_pais^q)*((1-BNE_pais)^(P-1-q))*exp(index_mu)/(1+exp(index_mu)); 
+q=q+1;
+endo;    
+
+mu_S_vector[i]=mu_S_aux;
+pi_star_BNE_vector[i]=BNE_pais;
+F_epsilon_vector[i]=probab_entry;
+
+i=i+1;
+
+endo;
+
+residual=number_entrants_market-P*F_Y;
+
+
+additional_instruments=
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X3)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X4)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X5)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X3.*X4)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X3.*X5)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X4.*X5)+gammma*number_entrants_market);
+
+
+instruments=
+X_covariates~exp(additional_instruments/s)./(1+exp(additional_instruments/s));
+
+D_instruments_gammma=
+zeros(n,cols(X_covariates))~(exp(additional_instruments/s)./((1+exp(additional_instruments/s))^2)).*(number_entrants_market/s)*D_gammma;
+    
+
+
+variables_jacobian=
+-(X_covariates~(-delta*nabla_mu_gamma_vector+eta*number_entrants_market)*D_gammma~(-mu_S_vector)*D_delta~(-(players-1).*pi_star_BNE_vector)*D_capital_delta~(ln(share_incumbent_market./(1-share_incumbent_market))+gammma*number_entrants_market)).*(lambda_2_vector).*players;
+
+
+jacobian=zeros(cols(instruments),rows(b));
+
+aux_jacobian_gammma=zeros(1,cols(X_covariates))~1~zeros(1,3);
+
+i=1;
+do while i .le n;
+jacobian_i=zeros(cols(instruments),rows(b));
+    
+j=1;
+do while j .le cols(instruments);
+jacobian_i[j,.]=variables_jacobian[i,.]*instruments[i,j]+D_instruments_gammma[i,j]*residual[i];
+j=j+1;
+endo;
+
+jacobian=jacobian+jacobian_i;
+
+i=i+1;
+endo;
+
+jacobian=jacobian/n;
+
+moments=meanc((instruments).*(residual));
+
+gradient=jacobian'*moments;
+
+retp(gradient');
+endp;
+
+
+
+betas0=ones(k_covar,1);
+eta0=1;
+
+_opgdprc=&analytical_gradient_GMM;
+
+
+b0=betas0|(ones(3,1))|eta0;
+
+{xx,ff,gg,ret}=optmum(&GMM_criterion,b0);
+
+Omega_moments=Variance_GMM_moments(xx);
+
+
+proc GMM_criterion_optimal(b);
+local P, sm, c, betas, gammma, delta, capital_delta, eta, zetta, i, t0;
+local BNE_pais, BNE_conditions, pai_0, pai_new, k;
+local nabla_mu_pi, mu, index_mu, index_t, index_t_BNE, G_index_t_BNE, q;
+local F_pai, nabla_pi_F, pai_k, mu_new, index_t_new, BNE_system;
+local F_Y, covars, probab_entry;
+local maximum_number_BNE;
+local residual, instruments, moments, Q_gmm; 
+local additional_instruments, iii;
+
+
+P=players;
+F_Y=zeros(n,1);
+    
+maximum_number_BNE=1;
+
+betas=b[1:k_covar];
+gammma=gammma_U*exp(b[k_covar+1]/sigma_gammma)/(1+exp(b[k_covar+1]/sigma_gammma));
+delta=delta_U*exp(b[k_covar+2]/sigma_delta)/(1+exp(b[k_covar+2]/sigma_delta));
+capital_delta=capital_delta_U*exp(b[k_covar+3]/sigma_cap_delta)/(1+exp(b[k_covar+3]/sigma_cap_delta));
+eta=b[k_covar+4];
+zetta=eta*gammma;
+
+i=1;
+do while i .le n;
+
+sm=share_incumbent_market[i];
+c=number_entrants_market[i];
+covars=X_covariates[i,.];
+
+t0=covars*betas;
+
+
+
+/*We search for "maximum_number_BNE" BNE*/
+BNE_pais=zeros(maximum_number_BNE,1);
+BNE_conditions=zeros(maximum_number_BNE,1);
+index_t_BNE=zeros(maximum_number_BNE,1);
+G_index_t_BNE=zeros(maximum_number_BNE,1);
+
+pai_0=0.5;
+
+pai_new=pai_0;
+
+
+k=1;
+do while k .le BNE_steps;
+    
+if k .eq 1;
+pai_k=pai_0;
+else;
+pai_k=pai_new;
+endif;    
+
+
+nabla_mu_pi=0;
+mu=0;
+
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+nabla_mu_pi=nabla_mu_pi+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*((q/pai_k)-(P-1-q)/(1-pai_k))*exp(index_mu)/(1+exp(index_mu));
+mu=mu+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t=t0-delta*mu-capital_delta*(P-1)*pai_k+eta*ln(sm/(1-sm))+zetta*c;
+
+F_pai=exp(index_t)/(1+exp(index_t));
+nabla_pi_F=1-exp(index_t)/((1+exp(index_t))^2)*(-delta*nabla_mu_pi-capital_delta*(P-1));
+
+pai_new=pai_k-(1/nabla_pi_F)*(pai_k-F_pai);
+
+q=0;
+mu_new=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+mu_new=mu_new+((P-1)!/((P-1-q)!*q!))*(pai_new^q)*((1-pai_new)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t_new=t0-delta*mu_new-capital_delta*(P-1)*pai_new+eta*ln(sm/(1-sm))+zetta*c;
+
+BNE_system=abs(pai_new-exp(index_t_new)/(1+exp(index_t_new)));
+
+k=k+1;
+endo;
+
+BNE_pais=pai_new;
+BNE_conditions=BNE_system;
+index_t_BNE=index_t_new;
+G_index_t_BNE=exp(index_t_new)/(1+exp(index_t_new));
+
+
+probab_entry=G_index_t_BNE;
+
+F_Y[i]=probab_entry;
+
+
+i=i+1;
+
+endo;
+
+residual=number_entrants_market-P*F_Y;
+
+
+additional_instruments=
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X3)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X4)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X5)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X3.*X4)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X3.*X5)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X4.*X5)+gammma*number_entrants_market);
+
+
+instruments=
+X_covariates~exp(additional_instruments/s)./(1+exp(additional_instruments/s));
+
+
+moments=meanc((instruments).*(residual));
+
+Q_gmm=(moments')*inv(Omega_moments)*moments;
+
+
+retp(Q_gmm);
+endp;
+
+
+
+proc analytical_gradient_GMM_optimal(b);
+local P, sm, c, betas, gammma, delta, capital_delta, eta, zetta, i, j, t0;
+local BNE_pais, BNE_conditions, pai_0, pai_new, k;
+local nabla_mu_pi, mu, index_mu, index_t, index_t_BNE, G_index_t_BNE, little_g_index_t_BNE, q;
+local F_pai, nabla_pi_F, pai_k, mu_new, index_t_new, BNE_system;
+local F_Y, covars, probab_entry;
+local maximum_number_BNE;
+local residual, instruments, moments, Q_gmm; 
+local additional_instruments;
+local nabla_mu_pi_aux,  nabla_mu_gamma_aux; 
+local nabla_sigma_pi, nabla_mu_pi_vector, nabla_mu_gamma_vector, lambda_1_vector, lambda_2_vector;
+local mu_S_aux, pi_star_BNE_vector, mu_S_vector, F_epsilon_vector;
+local D_gammma, D_delta, D_capital_delta;
+local D_instruments_gammma;
+local variables_jacobian, jacobian_i, jacobian, aux_jacobian_gammma;   
+local gradient;    
+
+P=players;
+F_Y=zeros(n,1);
+nabla_mu_pi_vector=zeros(n,1);
+nabla_mu_gamma_vector=zeros(n,1);
+lambda_1_vector=zeros(n,1);
+lambda_2_vector=zeros(n,1);   
+mu_S_vector=zeros(n,1);
+pi_star_BNE_vector=zeros(n,1);
+F_epsilon_vector=zeros(n,1);
+    
+maximum_number_BNE=1;
+
+betas=b[1:k_covar];
+gammma=gammma_U*exp(b[k_covar+1]/sigma_gammma)/(1+exp(b[k_covar+1]/sigma_gammma));
+delta=delta_U*exp(b[k_covar+2]/sigma_delta)/(1+exp(b[k_covar+2]/sigma_delta));
+capital_delta=capital_delta_U*exp(b[k_covar+3]/sigma_cap_delta)/(1+exp(b[k_covar+3]/sigma_cap_delta));
+eta=b[k_covar+4];
+zetta=eta*gammma;
+
+
+D_gammma=(gammma_U/sigma_gammma)*exp(b[k_covar+1]/sigma_gammma)/((1+exp(b[k_covar+1]/sigma_gammma))^2);
+D_delta=(delta_U/sigma_delta)*exp(b[k_covar+2]/sigma_delta)/((1+exp(b[k_covar+2]/sigma_delta))^2);
+D_capital_delta=(capital_delta_U/sigma_cap_delta)*exp(b[k_covar+3]/sigma_cap_delta)/((1+exp(b[k_covar+3]/sigma_cap_delta))^2);
+
+i=1;
+do while i .le n;
+
+sm=share_incumbent_market[i];
+c=number_entrants_market[i];
+covars=X_covariates[i,.];
+
+t0=covars*betas;
+
+
+
+/*We search for "maximum_number_BNE" BNE*/
+BNE_pais=zeros(maximum_number_BNE,1);
+BNE_conditions=zeros(maximum_number_BNE,1);
+index_t_BNE=zeros(maximum_number_BNE,1);
+G_index_t_BNE=zeros(maximum_number_BNE,1);
+
+
+pai_0=0.5;
+
+pai_new=pai_0;
+
+
+k=1;
+do while k .le BNE_steps;
+    
+if k .eq 1;
+pai_k=pai_0;
+else;
+pai_k=pai_new;
+endif;    
+
+
+nabla_mu_pi=0;
+mu=0;
+
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+nabla_mu_pi=nabla_mu_pi+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*((q/pai_k)-(P-1-q)/(1-pai_k))*exp(index_mu)/(1+exp(index_mu));
+mu=mu+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t=t0-delta*mu-capital_delta*(P-1)*pai_k+eta*ln(sm/(1-sm))+zetta*c;
+
+F_pai=exp(index_t)/(1+exp(index_t));
+nabla_pi_F=1-exp(index_t)/((1+exp(index_t))^2)*(-delta*nabla_mu_pi-capital_delta*(P-1));
+
+pai_new=pai_k-(1/nabla_pi_F)*(pai_k-F_pai);
+
+q=0;
+mu_new=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+mu_new=mu_new+((P-1)!/((P-1-q)!*q!))*(pai_new^q)*((1-pai_new)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t_new=t0-delta*mu_new-capital_delta*(P-1)*pai_new+eta*ln(sm/(1-sm))+zetta*c;
+
+BNE_system=abs(pai_new-exp(index_t_new)/(1+exp(index_t_new)));
+
+k=k+1;
+endo;
+
+BNE_pais=pai_new;
+BNE_conditions=BNE_system;
+index_t_BNE=index_t_new;
+G_index_t_BNE=exp(index_t_new)/(1+exp(index_t_new));
+little_g_index_t_BNE=exp(index_t_new)/((1+exp(index_t_new))^2);
+
+probab_entry=G_index_t_BNE;
+
+
+nabla_mu_pi_aux=0;
+nabla_mu_gamma_aux=0;
+
+q=0;
+do while q .le P-1;
+    
+    nabla_sigma_pi=(P-1)!/((P-1-q)!*q!)*(P-1)*(BNE_pais^q)*((1-BNE_pais)^(P-1-q))/(BNE_pais*(1-BNE_pais))*(q/(P-1)-BNE_pais);
+    index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));
+    nabla_mu_pi_aux=nabla_mu_pi_aux+nabla_sigma_pi*exp(index_mu)/(1+exp(index_mu));
+    nabla_mu_gamma_aux=nabla_mu_gamma_aux+((P-1)!/((P-1-q)!*q!))*(BNE_pais^q)*((1-BNE_pais)^(P-1-q))*exp(index_mu)/((1+exp(index_mu))^2)*(c-(q+1));
+    
+q=q+1;
+endo;
+
+nabla_mu_pi_vector[i]=nabla_mu_pi_aux;
+nabla_mu_gamma_vector[i]=nabla_mu_gamma_aux;
+
+lambda_1_vector[i]=little_g_index_t_BNE/(1+little_g_index_t_BNE*(delta*nabla_mu_pi_aux+capital_delta*(P-1)));
+
+lambda_2_vector[i]=little_g_index_t_BNE*(1-lambda_1_vector[i]*(delta*nabla_mu_pi_aux+capital_delta*(P-1)));
+
+
+F_Y[i]=probab_entry;
+
+
+mu_S_aux=0;
+q=0;
+do while q .le P-1;
+   index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));
+   mu_S_aux=mu_S_aux+((P-1)!/((P-1-q)!*q!))*(BNE_pais^q)*((1-BNE_pais)^(P-1-q))*exp(index_mu)/(1+exp(index_mu)); 
+q=q+1;
+endo;    
+
+mu_S_vector[i]=mu_S_aux;
+pi_star_BNE_vector[i]=BNE_pais;
+F_epsilon_vector[i]=probab_entry;
+
+i=i+1;
+
+endo;
+
+residual=number_entrants_market-P*F_Y;
+
+
+additional_instruments=
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X3)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X4)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X5)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X3.*X4)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X3.*X5)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X4.*X5)+gammma*number_entrants_market);
+
+
+instruments=
+X_covariates~exp(additional_instruments/s)./(1+exp(additional_instruments/s));
+
+D_instruments_gammma=
+zeros(n,cols(X_covariates))~(exp(additional_instruments/s)./((1+exp(additional_instruments/s))^2)).*(number_entrants_market/s)*D_gammma;
+    
+
+variables_jacobian=
+-(X_covariates~(-delta*nabla_mu_gamma_vector+eta*number_entrants_market)*D_gammma~(-mu_S_vector)*D_delta~(-(players-1).*pi_star_BNE_vector)*D_capital_delta~(ln(share_incumbent_market./(1-share_incumbent_market))+gammma*number_entrants_market)).*(lambda_2_vector).*players;
+
+
+jacobian=zeros(cols(instruments),rows(b));
+
+aux_jacobian_gammma=zeros(1,cols(X_covariates))~1~zeros(1,3);
+
+i=1;
+do while i .le n;
+jacobian_i=zeros(cols(instruments),rows(b));
+    
+j=1;
+do while j .le cols(instruments);
+jacobian_i[j,.]=variables_jacobian[i,.]*instruments[i,j]+D_instruments_gammma[i,j]*residual[i];
+j=j+1;
+endo;
+
+jacobian=jacobian+jacobian_i;
+
+i=i+1;
+endo;
+
+jacobian=jacobian/n;
+
+moments=meanc((instruments).*(residual));
+
+gradient=jacobian'*inv(Omega_moments)*moments;
+
+retp(gradient');
+endp;
+
+_opgdprc=&analytical_gradient_GMM_optimal;
+
+
+{xxx,fff,ggg,rettt}=optmum(&GMM_criterion_optimal,b0);
+
+
+Omega_moments_optimal=Variance_GMM_moments(xxx);
+
+W_matrix_optimal=inv(Omega_moments_optimal);
+
+nabla_G_optimal = gradp(&GMM_moments, xxx);
+
+W_matrix_first_stage=inv(Omega_moments);
+
+nabla_G_first_stage = gradp(&GMM_moments, xx);
+
+nabla_G_optimal_analytical = analytical_Jacobian_moments(xxx);
+
+cov_analytical=(1/n)*pinv(nabla_G_optimal_analytical'*W_matrix_optimal*nabla_G_optimal_analytical);
+
+
+betas_hat=xxx[1:k_covar];
+gammma_hat=gammma_U*exp(xxx[k_covar+1]/sigma_gammma)/(1+exp(xxx[k_covar+1]/sigma_gammma));
+delta_hat=delta_U*exp(xxx[k_covar+2]/sigma_delta)/(1+exp(xxx[k_covar+2]/sigma_delta));
+capital_delta_hat=capital_delta_U*exp(xxx[k_covar+3]/sigma_cap_delta)/(1+exp(xxx[k_covar+3]/sigma_cap_delta));
+eta_hat=xxx[k_covar+4];
+zetta_hat=eta_hat*gammma_hat;
+
+
+estimates=betas_hat|gammma_hat|delta_hat|capital_delta_hat|eta_hat;
+
+
+
+jacobian=
+eye(k_covar)~zeros(k_covar,4)|
+zeros(1,k_covar)~(gammma_U/sigma_gammma)*exp(xxx[k_covar+1]/sigma_gammma)/((1+exp(xxx[k_covar+1]/sigma_gammma))^2)~zeros(1,3)|
+zeros(1,k_covar+1)~(delta_U/sigma_delta)*exp(xxx[k_covar+2]/sigma_delta)/((1+exp(xxx[k_covar+2]/sigma_delta))^2)~zeros(1,2)|
+zeros(1,k_covar+2)~(capital_delta_U/sigma_cap_delta)*exp(xxx[k_covar+3]/sigma_cap_delta)/((1+exp(xxx[k_covar+3]/sigma_cap_delta))^2)~zeros(1,1)|
+zeros(1,k_covar+3)~1;
+
+
+var_cov_matrix_analytical=jacobian*cov_analytical*jacobian';
+
+standard_errors_analytical=sqrt(diag(var_cov_matrix_analytical));
+
+conf_intervals_analytical=estimates-cdfni(0.975)*standard_errors_analytical~estimates+cdfni(0.975)*standard_errors_analytical;
+
+
+
+/*BELOW: Testing for first-order conditions for alpha (whether alpha is chosen optimally by the incumbent to maximize its expected market share)*/
+
+proc GMM_moments_matrix_form(b);
+local P, sm, c, betas, gammma, delta, capital_delta, eta, zetta, i, t0;
+local BNE_pais, BNE_conditions, pai_0, pai_new, k;
+local nabla_mu_pi, mu, index_mu, index_t, index_t_BNE, G_index_t_BNE, q;
+local F_pai, nabla_pi_F, pai_k, mu_new, index_t_new, BNE_system;
+local F_Y, covars, probab_entry;
+local maximum_number_BNE;
+local residual, instruments, moments; 
+local additional_instruments, iii;
+
+P=players;
+F_Y=zeros(n,1);
+    
+maximum_number_BNE=1;
+
+betas=b[1:k_covar];
+gammma=gammma_U*exp(b[k_covar+1]/sigma_gammma)/(1+exp(b[k_covar+1]/sigma_gammma));
+delta=delta_U*exp(b[k_covar+2]/sigma_delta)/(1+exp(b[k_covar+2]/sigma_delta));
+capital_delta=capital_delta_U*exp(b[k_covar+3]/sigma_cap_delta)/(1+exp(b[k_covar+3]/sigma_cap_delta));
+eta=b[k_covar+4];
+zetta=eta*gammma;
+
+i=1;
+do while i .le n;
+
+sm=share_incumbent_market[i];
+c=number_entrants_market[i];
+covars=X_covariates[i,.];
+
+t0=covars*betas;
+
+
+
+/*We search for "maximum_number_BNE" BNE*/
+BNE_pais=zeros(maximum_number_BNE,1);
+BNE_conditions=zeros(maximum_number_BNE,1);
+index_t_BNE=zeros(maximum_number_BNE,1);
+G_index_t_BNE=zeros(maximum_number_BNE,1);
+
+pai_0=0.5;
+
+
+pai_new=pai_0;
+
+
+k=1;
+do while k .le BNE_steps;
+    
+if k .eq 1;
+pai_k=pai_0;
+else;
+pai_k=pai_new;
+endif;    
+
+
+nabla_mu_pi=0;
+mu=0;
+
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+nabla_mu_pi=nabla_mu_pi+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*((q/pai_k)-(P-1-q)/(1-pai_k))*exp(index_mu)/(1+exp(index_mu));
+mu=mu+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t=t0-delta*mu-capital_delta*(P-1)*pai_k+eta*ln(sm/(1-sm))+zetta*c;
+
+F_pai=exp(index_t)/(1+exp(index_t));
+nabla_pi_F=1-exp(index_t)/((1+exp(index_t))^2)*(-delta*nabla_mu_pi-capital_delta*(P-1));
+
+pai_new=pai_k-(1/nabla_pi_F)*(pai_k-F_pai);
+
+q=0;
+mu_new=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+mu_new=mu_new+((P-1)!/((P-1-q)!*q!))*(pai_new^q)*((1-pai_new)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t_new=t0-delta*mu_new-capital_delta*(P-1)*pai_new+eta*ln(sm/(1-sm))+zetta*c;
+
+BNE_system=abs(pai_new-exp(index_t_new)/(1+exp(index_t_new)));
+
+k=k+1;
+endo;
+
+BNE_pais=pai_new;
+BNE_conditions=BNE_system;
+index_t_BNE=index_t_new;
+G_index_t_BNE=exp(index_t_new)/(1+exp(index_t_new));
+
+
+
+probab_entry=G_index_t_BNE;
+
+F_Y[i]=probab_entry;
+
+
+i=i+1;
+
+endo;
+
+residual=number_entrants_market-P*F_Y;
+
+
+additional_instruments=
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X3)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X4)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X2.*X5)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X3.*X4)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X3.*X5)+gammma*number_entrants_market)~
+(ln(share_incumbent_market./(1-share_incumbent_market))+(X4.*X5)+gammma*number_entrants_market);
+
+
+instruments=
+X_covariates~exp(additional_instruments/s)./(1+exp(additional_instruments/s));
+
+
+
+moments=(instruments).*(residual);
+
+retp(moments);
+endp;
+
+
+prp=1;
+do while prp .le 9;
+    
+    if prp .eq 1;
+    zeta_function=ones(n,1);
+    elseif prp .eq 2;    
+    zeta_function=abs(X2+X3+X4+X5);    
+    elseif prp .eq 3;
+    zeta_function=(X2+X3+X4+X5)^2;
+    elseif prp .eq 4;
+    zeta_function=(X2+X3+X4+X5)^4;
+    elseif prp .eq 5;
+    zeta_function=(X2+X3+X4+X5)^6;    
+    elseif prp .eq 6;
+    zeta_function=(X2+X3+X4+X5)^8;    
+    elseif prp .eq 7;    
+    zeta_function=exp(X2+X3+X4+X5);
+    elseif prp .eq 8;
+    zeta_function=exp(-(X2+X3+X4+X5));
+    elseif prp .eq 9;    
+    zeta_function=ones(n,1)+abs(X1+X2+X3+X4+X5)+(X2+X3+X4+X5)^2+(X2+X3+X4+X5)^4+(X2+X3+X4+X5)^6+(X2+X3+X4+X5)^8+exp(X2+X3+X4+X5)+exp(-(X2+X3+X4+X5));
+    endif;
+
+
+nabla_mu_pi_incumbent=gradp(&foc_mu_incumbent, xxx);
+
+influence_function_foc_incumbent=foc_mu_incumbent_vector_form(xxx)+(nabla_mu_pi_incumbent*pinv(nabla_G_optimal'*W_matrix_optimal*nabla_G_optimal)*nabla_G_optimal'*W_matrix_optimal*(GMM_moments_matrix_form(xxx)'))';
+
+t_stat_foc_incumbent=sqrt(n)*foc_mu_incumbent(xxx)/stdc(influence_function_foc_incumbent);
+
+
+infl_function_foc_incumb_analyt=foc_mu_incumbent_vector_form(xxx)+(nabla_mu_pi_incumbent*pinv(nabla_G_optimal_analytical'*W_matrix_optimal*nabla_G_optimal_analytical)*nabla_G_optimal_analytical'*W_matrix_optimal*(GMM_moments_matrix_form(xxx)'))';
+
+/*THESE PRODUCE THE RESULTS IN TABLE 4*/
+if prp .eq 1;
+t_stat_foc_incumbent_analytical=sqrt(n)*foc_mu_incumbent(xxx)/stdc(infl_function_foc_incumb_analyt);
+estimated_foc_mu_incumbent=foc_mu_incumbent(xxx);    
+else;
+t_stat_foc_incumbent_analytical=t_stat_foc_incumbent_analytical|sqrt(n)*foc_mu_incumbent(xxx)/stdc(infl_function_foc_incumb_analyt);
+estimated_foc_mu_incumbent=estimated_foc_mu_incumbent|foc_mu_incumbent(xxx); 
+endif;    
+
+prp=prp+1;
+endo;
+
+
+
+estimated_t_index=X_covariates*betas_hat;
+
+conf_intervals_analytical=estimates-cdfni(0.975)*standard_errors_analytical~estimates+cdfni(0.975)*standard_errors_analytical;
+
+
+
+proc foc_mu_incumbent(b);
+local P, sm, c, betas, gammma, delta, capital_delta, eta, zetta, i, t0;
+local BNE_pais, BNE_conditions, pai_0, pai_new, k;
+local nabla_mu_pi, mu, index_mu, index_t, index_t_BNE, G_index_t_BNE, q;
+local F_pai, nabla_pi_F, pai_k, mu_new, index_t_new;
+local covars;
+local maximum_number_BNE;
+local pai_BNE, mu_BNE, index_BNE, G_BNE, H_BNE, little_g_BNE;
+local nabla_mu_pi_BNE_pi, nabla_mu_pi_BNE_alpha;
+local nabla_H_alpha, nabla_H_pi, nabla_pi_alpha;
+local nabla_sm_alpha;    
+
+P=players;
+nabla_sm_alpha=zeros(n,1);
+    
+maximum_number_BNE=1;
+
+betas=b[1:k_covar];
+gammma=gammma_U*exp(b[k_covar+1]/sigma_gammma)/(1+exp(b[k_covar+1]/sigma_gammma));
+delta=delta_U*exp(b[k_covar+2]/sigma_delta)/(1+exp(b[k_covar+2]/sigma_delta));
+capital_delta=capital_delta_U*exp(b[k_covar+3]/sigma_cap_delta)/(1+exp(b[k_covar+3]/sigma_cap_delta));
+eta=b[k_covar+4];
+zetta=eta*gammma;
+
+i=1;
+do while i .le n;
+
+sm=share_incumbent_market[i];
+c=number_entrants_market[i];
+covars=X_covariates[i,.];
+
+t0=covars*betas;
+
+
+/*We search for "maximum_number_BNE" BNE*/
+BNE_pais=zeros(maximum_number_BNE,1);
+BNE_conditions=zeros(maximum_number_BNE,1);
+index_t_BNE=zeros(maximum_number_BNE,1);
+G_index_t_BNE=zeros(maximum_number_BNE,1);
+
+pai_0=0.5;
+
+pai_new=pai_0;
+
+
+k=1;
+do while k .le BNE_steps;
+    
+if k .eq 1;
+pai_k=pai_0;
+else;
+pai_k=pai_new;
+endif;    
+
+
+nabla_mu_pi=0;
+mu=0;
+
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+nabla_mu_pi=nabla_mu_pi+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*((q/pai_k)-(P-1-q)/(1-pai_k))*exp(index_mu)/(1+exp(index_mu));
+mu=mu+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t=t0-delta*mu-capital_delta*(P-1)*pai_k+eta*ln(sm/(1-sm))+zetta*c;
+
+F_pai=exp(index_t)/(1+exp(index_t));
+nabla_pi_F=1-exp(index_t)/((1+exp(index_t))^2)*(-delta*nabla_mu_pi-capital_delta*(P-1));
+
+pai_new=pai_k-(1/nabla_pi_F)*(pai_k-F_pai);
+
+q=0;
+mu_new=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+mu_new=mu_new+((P-1)!/((P-1-q)!*q!))*(pai_new^q)*((1-pai_new)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t_new=t0-delta*mu_new-capital_delta*(P-1)*pai_new+eta*ln(sm/(1-sm))+zetta*c;
+
+k=k+1;
+endo;
+
+
+
+pai_BNE=pai_new;
+mu_BNE=mu_new;
+index_BNE=index_t_new;
+
+G_BNE=exp(index_BNE)/(1+exp(index_BNE));
+H_BNE=pai_BNE-G_BNE;
+little_g_BNE=exp(index_BNE)/((1+exp(index_BNE))^2);
+
+nabla_mu_pi_BNE_pi=0;
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+nabla_mu_pi_BNE_pi=nabla_mu_pi_BNE_pi+((P-1)!/((P-1-q)!*q!))*(pai_BNE^q)*((1-pai_BNE)^(P-1-q))*((q/pai_BNE)-(P-1-q)/(1-pai_BNE))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+
+nabla_mu_pi_BNE_alpha=0;
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+nabla_mu_pi_BNE_alpha=nabla_mu_pi_BNE_alpha+((P-1)!/((P-1-q)!*q!))*(pai_BNE^q)*((1-pai_BNE)^(P-1-q))*exp(index_mu)/((1+exp(index_mu))^2);
+q=q+1;
+endo;
+
+nabla_H_alpha=-little_g_BNE*(eta-delta*nabla_mu_pi_BNE_alpha);
+nabla_H_pi=1+little_g_BNE*(delta*nabla_mu_pi_BNE_pi+capital_delta*(P-1));
+
+nabla_pi_alpha=-(1/nabla_H_pi)*nabla_H_alpha;
+
+nabla_sm_alpha[i]=nabla_mu_pi_BNE_alpha+nabla_mu_pi_BNE_pi*nabla_pi_alpha;
+
+i=i+1;
+endo;
+
+retp(meanc(nabla_sm_alpha.*zeta_function));
+endp;
+
+
+proc foc_mu_incumbent_vector_form(b);
+local P, sm, c, betas, gammma, delta, capital_delta, eta, zetta, i, t0;
+local BNE_pais, BNE_conditions, pai_0, pai_new, k;
+local nabla_mu_pi, mu, index_mu, index_t, index_t_BNE, G_index_t_BNE, q;
+local F_pai, nabla_pi_F, pai_k, mu_new, index_t_new;
+local covars;
+local maximum_number_BNE;
+local pai_BNE, mu_BNE, index_BNE, G_BNE, H_BNE, little_g_BNE;
+local nabla_mu_pi_BNE_pi, nabla_mu_pi_BNE_alpha;
+local nabla_H_alpha, nabla_H_pi, nabla_pi_alpha;
+local nabla_sm_alpha;    
+
+P=players;
+nabla_sm_alpha=zeros(n,1);
+    
+maximum_number_BNE=1;
+
+betas=b[1:k_covar];
+gammma=gammma_U*exp(b[k_covar+1]/sigma_gammma)/(1+exp(b[k_covar+1]/sigma_gammma));
+delta=delta_U*exp(b[k_covar+2]/sigma_delta)/(1+exp(b[k_covar+2]/sigma_delta));
+capital_delta=capital_delta_U*exp(b[k_covar+3]/sigma_cap_delta)/(1+exp(b[k_covar+3]/sigma_cap_delta));
+eta=b[k_covar+4];
+zetta=eta*gammma;
+
+i=1;
+do while i .le n;
+
+sm=share_incumbent_market[i];
+c=number_entrants_market[i];
+covars=X_covariates[i,.];
+
+t0=covars*betas;
+
+
+/*We search for "maximum_number_BNE" BNE*/
+BNE_pais=zeros(maximum_number_BNE,1);
+BNE_conditions=zeros(maximum_number_BNE,1);
+index_t_BNE=zeros(maximum_number_BNE,1);
+G_index_t_BNE=zeros(maximum_number_BNE,1);
+
+pai_0=0.5;
+
+pai_new=pai_0;
+
+
+k=1;
+do while k .le BNE_steps;
+    
+if k .eq 1;
+pai_k=pai_0;
+else;
+pai_k=pai_new;
+endif;    
+
+
+nabla_mu_pi=0;
+mu=0;
+
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+nabla_mu_pi=nabla_mu_pi+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*((q/pai_k)-(P-1-q)/(1-pai_k))*exp(index_mu)/(1+exp(index_mu));
+mu=mu+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t=t0-delta*mu-capital_delta*(P-1)*pai_k+eta*ln(sm/(1-sm))+zetta*c;
+
+F_pai=exp(index_t)/(1+exp(index_t));
+nabla_pi_F=1-exp(index_t)/((1+exp(index_t))^2)*(-delta*nabla_mu_pi-capital_delta*(P-1));
+
+pai_new=pai_k-(1/nabla_pi_F)*(pai_k-F_pai);
+
+q=0;
+mu_new=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+mu_new=mu_new+((P-1)!/((P-1-q)!*q!))*(pai_new^q)*((1-pai_new)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t_new=t0-delta*mu_new-capital_delta*(P-1)*pai_new+eta*ln(sm/(1-sm))+zetta*c;
+
+k=k+1;
+endo;
+
+
+
+pai_BNE=pai_new;
+mu_BNE=mu_new;
+index_BNE=index_t_new;
+
+G_BNE=exp(index_BNE)/(1+exp(index_BNE));
+H_BNE=pai_BNE-G_BNE;
+little_g_BNE=exp(index_BNE)/((1+exp(index_BNE))^2);
+
+nabla_mu_pi_BNE_pi=0;
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+nabla_mu_pi_BNE_pi=nabla_mu_pi_BNE_pi+((P-1)!/((P-1-q)!*q!))*(pai_BNE^q)*((1-pai_BNE)^(P-1-q))*((q/pai_BNE)-(P-1-q)/(1-pai_BNE))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+
+nabla_mu_pi_BNE_alpha=0;
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+nabla_mu_pi_BNE_alpha=nabla_mu_pi_BNE_alpha+((P-1)!/((P-1-q)!*q!))*(pai_BNE^q)*((1-pai_BNE)^(P-1-q))*exp(index_mu)/((1+exp(index_mu))^2);
+q=q+1;
+endo;
+
+nabla_H_alpha=-little_g_BNE*(eta-delta*nabla_mu_pi_BNE_alpha);
+nabla_H_pi=1+little_g_BNE*(delta*nabla_mu_pi_BNE_pi+capital_delta*(P-1));
+
+nabla_pi_alpha=-(1/nabla_H_pi)*nabla_H_alpha;
+
+nabla_sm_alpha[i]=nabla_mu_pi_BNE_alpha+nabla_mu_pi_BNE_pi*nabla_pi_alpha;
+
+i=i+1;
+endo;
+
+retp(nabla_sm_alpha.*zeta_function-meanc(nabla_sm_alpha.*zeta_function));
+endp;
+
+
+
+
+/*CONSTRUCTING A CONFIDENCE REGION FOR THE PARAMETERS*/
+
+gridsize=1000000;
+
+thetas_confidence_set=estimates';
+
+thetas_grid=ones(gridsize,rows(estimates)).*conf_intervals_analytical[.,1]'+rndu(gridsize,rows(estimates)).*(conf_intervals_analytical[.,2]'-conf_intervals_analytical[.,1]');
+
+i=1;
+do while i .le gridsize;
+chi_statistic=(estimates-thetas_grid[i,.]')'*inv(var_cov_matrix_analytical)*(estimates-thetas_grid[i,.]');
+if chi_statistic .lt cdfchii(0.95,rows(estimates));
+thetas_confidence_set=thetas_confidence_set|thetas_grid[i,.];
+endif;
+i=i+1;
+endo;
+
+
+/*COUNTERFACTUALS BELOW*/
+
+
+proc counterfactuals(b,z);
+local P, sm, c, betas, gammma, delta, capital_delta, eta, zetta, i, t0;
+local BNE_pais, BNE_conditions, pai_0, pai_new, k;
+local nabla_mu_pi, mu, index_mu, index_t, index_t_BNE, G_index_t_BNE, q;
+local F_pai, nabla_pi_F, pai_k, mu_new, index_t_new, BNE_system;
+local F_Y, covars, probab_entry;
+local maximum_number_BNE;
+local alpha_component_counterf, change_in_alpha;
+local counterf_entry_probability, counterf_expected_incumb_share;
+local rate_change_alpha;
+
+rate_change_alpha=z[1];    
+
+P=players;
+F_Y=zeros(n,1);
+
+counterf_entry_probability=zeros(n,1);
+counterf_expected_incumb_share=zeros(n,1);   
+    
+maximum_number_BNE=1;
+
+betas=b[1:k_covar];
+gammma=b[k_covar+1];
+delta=b[k_covar+2];
+capital_delta=b[k_covar+3];
+eta=b[k_covar+4];
+zetta=eta*gammma;
+
+alpha_component_counterf=abs(ln(share_incumbent_market./(1-share_incumbent_market))+gammma*number_entrants_market);
+
+change_in_alpha=alpha_component_counterf*rate_change_alpha;
+
+
+i=1;
+do while i .le n;
+
+sm=share_incumbent_market[i];
+c=number_entrants_market[i];
+covars=X_covariates[i,.];
+
+t0=covars*betas;
+
+
+
+/*We search for "maximum_number_BNE" BNE*/
+BNE_pais=zeros(maximum_number_BNE,1);
+BNE_conditions=zeros(maximum_number_BNE,1);
+index_t_BNE=zeros(maximum_number_BNE,1);
+G_index_t_BNE=zeros(maximum_number_BNE,1);
+
+
+pai_0=0.5;
+
+pai_new=pai_0;
+
+
+k=1;
+do while k .le BNE_steps;
+    
+if k .eq 1;
+pai_k=pai_0;
+else;
+pai_k=pai_new;
+endif;    
+
+
+nabla_mu_pi=0;
+mu=0;
+
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1))+change_in_alpha[i];    
+nabla_mu_pi=nabla_mu_pi+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*((q/pai_k)-(P-1-q)/(1-pai_k))*exp(index_mu)/(1+exp(index_mu));
+mu=mu+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t=t0-delta*mu-capital_delta*(P-1)*pai_k+eta*ln(sm/(1-sm))+zetta*c+eta*change_in_alpha[i];
+
+F_pai=exp(index_t)/(1+exp(index_t));
+nabla_pi_F=1-exp(index_t)/((1+exp(index_t))^2)*(-delta*nabla_mu_pi-capital_delta*(P-1));
+
+pai_new=pai_k-(1/nabla_pi_F)*(pai_k-F_pai);
+
+q=0;
+mu_new=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1))+change_in_alpha[i];    
+mu_new=mu_new+((P-1)!/((P-1-q)!*q!))*(pai_new^q)*((1-pai_new)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t_new=t0-delta*mu_new-capital_delta*(P-1)*pai_new+eta*ln(sm/(1-sm))+zetta*c+eta*change_in_alpha[i];
+
+BNE_system=abs(pai_new-exp(index_t_new)/(1+exp(index_t_new)));
+
+k=k+1;
+endo;
+
+BNE_pais=pai_new;
+BNE_conditions=BNE_system;
+index_t_BNE=index_t_new;
+G_index_t_BNE=exp(index_t_new)/(1+exp(index_t_new));
+
+
+probab_entry=G_index_t_BNE;
+
+counterf_entry_probability[i]=probab_entry;
+counterf_expected_incumb_share[i]=mu_new;
+
+i=i+1;
+
+endo;
+
+
+retp((counterf_entry_probability)~(counterf_expected_incumb_share));
+endp;
+
+
+median_entr_prob_00=zeros(rows(thetas_confidence_set),1);
+median_inc_mkt_share_00=zeros(rows(thetas_confidence_set),1);
+
+
+change_entr_prob_05=zeros(rows(thetas_confidence_set),1);
+change_inc_mkt_share_05=zeros(rows(thetas_confidence_set),1);
+
+change_entr_prob_10=zeros(rows(thetas_confidence_set),1);
+change_inc_mkt_share_10=zeros(rows(thetas_confidence_set),1);
+
+change_entr_prob_15=zeros(rows(thetas_confidence_set),1);
+change_inc_mkt_share_15=zeros(rows(thetas_confidence_set),1);
+
+change_entr_prob_20=zeros(rows(thetas_confidence_set),1);
+change_inc_mkt_share_20=zeros(rows(thetas_confidence_set),1);
+
+change_entr_prob_25=zeros(rows(thetas_confidence_set),1);
+change_inc_mkt_share_25=zeros(rows(thetas_confidence_set),1);
+
+change_entr_prob_30=zeros(rows(thetas_confidence_set),1);
+change_inc_mkt_share_30=zeros(rows(thetas_confidence_set),1);
+
+change_entr_prob_35=zeros(rows(thetas_confidence_set),1);
+change_inc_mkt_share_35=zeros(rows(thetas_confidence_set),1);
+
+change_entr_prob_40=zeros(rows(thetas_confidence_set),1);
+change_inc_mkt_share_40=zeros(rows(thetas_confidence_set),1);
+
+
+median_ch_entr_prob_05=zeros(rows(thetas_confidence_set),1);
+median_ch_inc_mkt_share_05=zeros(rows(thetas_confidence_set),1);
+
+median_ch_entr_prob_10=zeros(rows(thetas_confidence_set),1);
+median_ch_inc_mkt_share_10=zeros(rows(thetas_confidence_set),1);
+
+median_ch_entr_prob_15=zeros(rows(thetas_confidence_set),1);
+median_ch_inc_mkt_share_15=zeros(rows(thetas_confidence_set),1);
+
+median_ch_entr_prob_20=zeros(rows(thetas_confidence_set),1);
+median_ch_inc_mkt_share_20=zeros(rows(thetas_confidence_set),1);
+
+median_ch_entr_prob_25=zeros(rows(thetas_confidence_set),1);
+median_ch_inc_mkt_share_25=zeros(rows(thetas_confidence_set),1);
+
+median_ch_entr_prob_30=zeros(rows(thetas_confidence_set),1);
+median_ch_inc_mkt_share_30=zeros(rows(thetas_confidence_set),1);
+
+median_ch_entr_prob_35=zeros(rows(thetas_confidence_set),1);
+median_ch_inc_mkt_share_35=zeros(rows(thetas_confidence_set),1);
+
+median_ch_entr_prob_40=zeros(rows(thetas_confidence_set),1);
+median_ch_inc_mkt_share_40=zeros(rows(thetas_confidence_set),1);
+
+
+median_entr_prob_05=zeros(rows(thetas_confidence_set),1);
+median_inc_mkt_share_05=zeros(rows(thetas_confidence_set),1);
+
+median_entr_prob_10=zeros(rows(thetas_confidence_set),1);
+median_inc_mkt_share_10=zeros(rows(thetas_confidence_set),1);
+
+median_entr_prob_15=zeros(rows(thetas_confidence_set),1);
+median_inc_mkt_share_15=zeros(rows(thetas_confidence_set),1);
+
+median_entr_prob_20=zeros(rows(thetas_confidence_set),1);
+median_inc_mkt_share_20=zeros(rows(thetas_confidence_set),1);
+
+median_entr_prob_25=zeros(rows(thetas_confidence_set),1);
+median_inc_mkt_share_25=zeros(rows(thetas_confidence_set),1);
+
+median_entr_prob_30=zeros(rows(thetas_confidence_set),1);
+median_inc_mkt_share_30=zeros(rows(thetas_confidence_set),1);
+
+median_entr_prob_35=zeros(rows(thetas_confidence_set),1);
+median_inc_mkt_share_35=zeros(rows(thetas_confidence_set),1);
+
+median_entr_prob_40=zeros(rows(thetas_confidence_set),1);
+median_inc_mkt_share_40=zeros(rows(thetas_confidence_set),1);
+
+
+mean_ch_entr_prob_05=zeros(rows(thetas_confidence_set),1);
+mean_ch_inc_mkt_share_05=zeros(rows(thetas_confidence_set),1);
+
+mean_ch_entr_prob_10=zeros(rows(thetas_confidence_set),1);
+mean_ch_inc_mkt_share_10=zeros(rows(thetas_confidence_set),1);
+
+mean_ch_entr_prob_15=zeros(rows(thetas_confidence_set),1);
+mean_ch_inc_mkt_share_15=zeros(rows(thetas_confidence_set),1);
+
+mean_ch_entr_prob_20=zeros(rows(thetas_confidence_set),1);
+mean_ch_inc_mkt_share_20=zeros(rows(thetas_confidence_set),1);
+
+mean_ch_entr_prob_25=zeros(rows(thetas_confidence_set),1);
+mean_ch_inc_mkt_share_25=zeros(rows(thetas_confidence_set),1);
+
+mean_ch_entr_prob_30=zeros(rows(thetas_confidence_set),1);
+mean_ch_inc_mkt_share_30=zeros(rows(thetas_confidence_set),1);
+
+mean_ch_entr_prob_35=zeros(rows(thetas_confidence_set),1);
+mean_ch_inc_mkt_share_35=zeros(rows(thetas_confidence_set),1);
+
+mean_ch_entr_prob_40=zeros(rows(thetas_confidence_set),1);
+mean_ch_inc_mkt_share_40=zeros(rows(thetas_confidence_set),1);
+
+
+mean_entr_prob_00=zeros(rows(thetas_confidence_set),1);
+mean_inc_mkt_share_00=zeros(rows(thetas_confidence_set),1);
+
+
+mean_entr_prob_05=zeros(rows(thetas_confidence_set),1);
+mean_inc_mkt_share_05=zeros(rows(thetas_confidence_set),1);
+
+mean_entr_prob_10=zeros(rows(thetas_confidence_set),1);
+mean_inc_mkt_share_10=zeros(rows(thetas_confidence_set),1);
+
+mean_entr_prob_15=zeros(rows(thetas_confidence_set),1);
+mean_inc_mkt_share_15=zeros(rows(thetas_confidence_set),1);
+
+mean_entr_prob_20=zeros(rows(thetas_confidence_set),1);
+mean_inc_mkt_share_20=zeros(rows(thetas_confidence_set),1);
+
+mean_entr_prob_25=zeros(rows(thetas_confidence_set),1);
+mean_inc_mkt_share_25=zeros(rows(thetas_confidence_set),1);
+
+mean_entr_prob_30=zeros(rows(thetas_confidence_set),1);
+mean_inc_mkt_share_30=zeros(rows(thetas_confidence_set),1);
+
+mean_entr_prob_35=zeros(rows(thetas_confidence_set),1);
+mean_inc_mkt_share_35=zeros(rows(thetas_confidence_set),1);
+
+mean_entr_prob_40=zeros(rows(thetas_confidence_set),1);
+mean_inc_mkt_share_40=zeros(rows(thetas_confidence_set),1);
+
+one_more_entrant_counterfactual=zeros(rows(thetas_confidence_set),1);
+
+simple_counterf_entry_prob_01=zeros(rows(thetas_confidence_set),1);
+simple_counterf_entry_prob_02=zeros(rows(thetas_confidence_set),1);
+simple_counterf_entry_prob_05=zeros(rows(thetas_confidence_set),1);
+simple_counterf_entry_prob_10=zeros(rows(thetas_confidence_set),1);
+
+median_counterf_entry_prob_01=zeros(rows(thetas_confidence_set),1);
+median_counterf_entry_prob_02=zeros(rows(thetas_confidence_set),1);
+median_counterf_entry_prob_05=zeros(rows(thetas_confidence_set),1);
+median_counterf_entry_prob_10=zeros(rows(thetas_confidence_set),1);
+
+
+simple_counterf_mu_S_01=zeros(rows(thetas_confidence_set),1);
+simple_counterf_mu_S_02=zeros(rows(thetas_confidence_set),1);
+simple_counterf_mu_S_05=zeros(rows(thetas_confidence_set),1);
+simple_counterf_mu_S_10=zeros(rows(thetas_confidence_set),1);
+
+median_counterf_mu_S_01=zeros(rows(thetas_confidence_set),1);
+median_counterf_mu_S_02=zeros(rows(thetas_confidence_set),1);
+median_counterf_mu_S_05=zeros(rows(thetas_confidence_set),1);
+median_counterf_mu_S_10=zeros(rows(thetas_confidence_set),1);
+
+simple_counterf_prop_mu_S_01=zeros(rows(thetas_confidence_set),1);
+simple_counterf_prop_mu_S_02=zeros(rows(thetas_confidence_set),1);
+simple_counterf_prop_mu_S_05=zeros(rows(thetas_confidence_set),1);
+simple_counterf_prop_mu_S_10=zeros(rows(thetas_confidence_set),1);
+
+median_counterf_prop_mu_S_01=zeros(rows(thetas_confidence_set),1);
+median_counterf_prop_mu_S_02=zeros(rows(thetas_confidence_set),1);
+median_counterf_prop_mu_S_05=zeros(rows(thetas_confidence_set),1);
+median_counterf_prop_mu_S_10=zeros(rows(thetas_confidence_set),1);
+
+BNE_entry_probability_10_quant=zeros(rows(thetas_confidence_set),1);
+BNE_entry_probability_25_quant=zeros(rows(thetas_confidence_set),1);
+BNE_entry_probability_50_quant=zeros(rows(thetas_confidence_set),1);
+BNE_entry_probability_75_quant=zeros(rows(thetas_confidence_set),1);
+BNE_entry_probability_90_quant=zeros(rows(thetas_confidence_set),1);
+
+
+BNE_mu_S_10_quant=zeros(rows(thetas_confidence_set),1);
+BNE_mu_S_25_quant=zeros(rows(thetas_confidence_set),1);
+BNE_mu_S_50_quant=zeros(rows(thetas_confidence_set),1);
+BNE_mu_S_75_quant=zeros(rows(thetas_confidence_set),1);
+BNE_mu_S_90_quant=zeros(rows(thetas_confidence_set),1);
+
+
+integrated_min_jacobian_0=zeros(rows(thetas_confidence_set),1);
+
+aux_pi_grid=seqa(0,0.01,101);
+
+aux_pi_grid=sortc(aux_pi_grid,1);
+
+
+ppp=1;
+do while ppp .le rows(thetas_confidence_set);
+
+thetas_CS=thetas_confidence_set[ppp,.]';
+
+original_results=counterfactuals(thetas_CS,0);
+median_entr_prob_00[ppp]=quantile(original_results[.,1], 0.5);
+median_inc_mkt_share_00[ppp]=quantile(original_results[.,2], 0.5);      
+
+counterf_results_05=counterfactuals(thetas_CS,0.05);
+change_entr_prob_05[ppp]=meanc(counterf_results_05[.,1]-original_results[.,1] .gt 0);
+change_inc_mkt_share_05[ppp]=meanc(counterf_results_05[.,2]-original_results[.,2] .lt 0);
+median_ch_entr_prob_05[ppp]=quantile(counterf_results_05[.,1]-original_results[.,1], 0.5);
+median_ch_inc_mkt_share_05[ppp]=quantile(counterf_results_05[.,2]-original_results[.,2], 0.5);
+median_entr_prob_05[ppp]=quantile(counterf_results_05[.,1], 0.5);
+median_inc_mkt_share_05[ppp]=quantile(counterf_results_05[.,2], 0.5);    
+mean_ch_entr_prob_05[ppp]=meanc(counterf_results_05[.,1]-original_results[.,1]);
+mean_ch_inc_mkt_share_05[ppp]=meanc(counterf_results_05[.,2]-original_results[.,2]);
+mean_entr_prob_05[ppp]=meanc(counterf_results_05[.,1]);
+mean_inc_mkt_share_05[ppp]=meanc(counterf_results_05[.,2]);    
+
+    
+    
+counterf_results_10=counterfactuals(thetas_CS,0.10);
+change_entr_prob_10[ppp]=meanc(counterf_results_10[.,1]-original_results[.,1] .gt 0);
+change_inc_mkt_share_10[ppp]=meanc(counterf_results_10[.,2]-original_results[.,2] .lt 0);
+median_ch_entr_prob_10[ppp]=quantile(counterf_results_10[.,1]-original_results[.,1], 0.5);
+median_ch_inc_mkt_share_10[ppp]=quantile(counterf_results_10[.,2]-original_results[.,2], 0.5);
+median_entr_prob_10[ppp]=quantile(counterf_results_10[.,1], 0.5);
+median_inc_mkt_share_10[ppp]=quantile(counterf_results_10[.,2], 0.5); 
+mean_ch_entr_prob_10[ppp]=meanc(counterf_results_10[.,1]-original_results[.,1]);
+mean_ch_inc_mkt_share_10[ppp]=meanc(counterf_results_10[.,2]-original_results[.,2]);
+mean_entr_prob_10[ppp]=meanc(counterf_results_10[.,1]);
+mean_inc_mkt_share_10[ppp]=meanc(counterf_results_10[.,2]);    
+
+
+
+counterf_results_15=counterfactuals(thetas_CS,0.15);
+change_entr_prob_15[ppp]=meanc(counterf_results_15[.,1]-original_results[.,1] .gt 0);
+change_inc_mkt_share_15[ppp]=meanc(counterf_results_15[.,2]-original_results[.,2] .lt 0);
+median_ch_entr_prob_15[ppp]=quantile(counterf_results_15[.,1]-original_results[.,1], 0.5);
+median_ch_inc_mkt_share_15[ppp]=quantile(counterf_results_15[.,2]-original_results[.,2], 0.5);
+median_entr_prob_15[ppp]=quantile(counterf_results_15[.,1], 0.5);
+median_inc_mkt_share_15[ppp]=quantile(counterf_results_15[.,2], 0.5); 
+mean_ch_entr_prob_15[ppp]=meanc(counterf_results_15[.,1]-original_results[.,1]);
+mean_ch_inc_mkt_share_15[ppp]=meanc(counterf_results_15[.,2]-original_results[.,2]);
+mean_entr_prob_15[ppp]=meanc(counterf_results_15[.,1]);
+mean_inc_mkt_share_15[ppp]=meanc(counterf_results_15[.,2]);    
+
+
+counterf_results_20=counterfactuals(thetas_CS,0.20);
+change_entr_prob_20[ppp]=meanc(counterf_results_20[.,1]-original_results[.,1] .gt 0);
+change_inc_mkt_share_20[ppp]=meanc(counterf_results_20[.,2]-original_results[.,2] .lt 0);
+median_ch_entr_prob_20[ppp]=quantile(counterf_results_20[.,1]-original_results[.,1], 0.5);
+median_ch_inc_mkt_share_20[ppp]=quantile(counterf_results_20[.,2]-original_results[.,2], 0.5);
+median_entr_prob_20[ppp]=quantile(counterf_results_20[.,1], 0.5);
+median_inc_mkt_share_20[ppp]=quantile(counterf_results_20[.,2], 0.5);
+mean_ch_entr_prob_20[ppp]=meanc(counterf_results_20[.,1]-original_results[.,1]);
+mean_ch_inc_mkt_share_20[ppp]=meanc(counterf_results_20[.,2]-original_results[.,2]);
+mean_entr_prob_20[ppp]=meanc(counterf_results_20[.,1]);
+mean_inc_mkt_share_20[ppp]=meanc(counterf_results_20[.,2]);    
+
+
+counterf_results_25=counterfactuals(thetas_CS,0.25);
+change_entr_prob_25[ppp]=meanc(counterf_results_25[.,1]-original_results[.,1] .gt 0);
+change_inc_mkt_share_25[ppp]=meanc(counterf_results_25[.,2]-original_results[.,2] .lt 0);
+median_ch_entr_prob_25[ppp]=quantile(counterf_results_25[.,1]-original_results[.,1], 0.5);
+median_ch_inc_mkt_share_25[ppp]=quantile(counterf_results_25[.,2]-original_results[.,2], 0.5);
+median_entr_prob_25[ppp]=quantile(counterf_results_25[.,1], 0.5);
+median_inc_mkt_share_25[ppp]=quantile(counterf_results_25[.,2], 0.5);
+mean_ch_entr_prob_25[ppp]=meanc(counterf_results_25[.,1]-original_results[.,1]);
+mean_ch_inc_mkt_share_25[ppp]=meanc(counterf_results_25[.,2]-original_results[.,2]);
+mean_entr_prob_25[ppp]=meanc(counterf_results_25[.,1]);
+mean_inc_mkt_share_25[ppp]=meanc(counterf_results_25[.,2]);    
+
+
+counterf_results_30=counterfactuals(thetas_CS,0.30);
+change_entr_prob_30[ppp]=meanc(counterf_results_30[.,1]-original_results[.,1] .gt 0);
+change_inc_mkt_share_30[ppp]=meanc(counterf_results_30[.,2]-original_results[.,2] .lt 0);
+median_ch_entr_prob_30[ppp]=quantile(counterf_results_30[.,1]-original_results[.,1], 0.5);
+median_ch_inc_mkt_share_30[ppp]=quantile(counterf_results_30[.,2]-original_results[.,2], 0.5);
+median_entr_prob_30[ppp]=quantile(counterf_results_30[.,1], 0.5);
+median_inc_mkt_share_30[ppp]=quantile(counterf_results_30[.,2], 0.5);
+mean_ch_entr_prob_30[ppp]=meanc(counterf_results_30[.,1]-original_results[.,1]);
+mean_ch_inc_mkt_share_30[ppp]=meanc(counterf_results_30[.,2]-original_results[.,2]);
+mean_entr_prob_30[ppp]=meanc(counterf_results_30[.,1]);
+mean_inc_mkt_share_30[ppp]=meanc(counterf_results_30[.,2]);  
+
+
+counterf_results_35=counterfactuals(thetas_CS,0.35);
+change_entr_prob_35[ppp]=meanc(counterf_results_35[.,1]-original_results[.,1] .gt 0);
+change_inc_mkt_share_35[ppp]=meanc(counterf_results_35[.,2]-original_results[.,2] .lt 0);
+median_ch_entr_prob_35[ppp]=quantile(counterf_results_35[.,1]-original_results[.,1], 0.5);
+median_ch_inc_mkt_share_35[ppp]=quantile(counterf_results_35[.,2]-original_results[.,2], 0.5);
+median_entr_prob_35[ppp]=quantile(counterf_results_35[.,1], 0.5);
+median_inc_mkt_share_35[ppp]=quantile(counterf_results_35[.,2], 0.5);
+mean_ch_entr_prob_35[ppp]=meanc(counterf_results_35[.,1]-original_results[.,1]);
+mean_ch_inc_mkt_share_35[ppp]=meanc(counterf_results_35[.,2]-original_results[.,2]);
+mean_entr_prob_35[ppp]=meanc(counterf_results_35[.,1]);
+mean_inc_mkt_share_35[ppp]=meanc(counterf_results_35[.,2]);  
+
+
+counterf_results_40=counterfactuals(thetas_CS,0.40);
+change_entr_prob_40[ppp]=meanc(counterf_results_40[.,1]-original_results[.,1] .gt 0);
+change_inc_mkt_share_40[ppp]=meanc(counterf_results_40[.,2]-original_results[.,2] .lt 0);
+median_ch_entr_prob_40[ppp]=quantile(counterf_results_40[.,1]-original_results[.,1], 0.5);
+median_ch_inc_mkt_share_40[ppp]=quantile(counterf_results_40[.,2]-original_results[.,2], 0.5);
+median_entr_prob_40[ppp]=quantile(counterf_results_40[.,1], 0.5);
+median_inc_mkt_share_40[ppp]=quantile(counterf_results_40[.,2], 0.5);
+mean_ch_entr_prob_40[ppp]=meanc(counterf_results_40[.,1]-original_results[.,1]);
+mean_ch_inc_mkt_share_40[ppp]=meanc(counterf_results_40[.,2]-original_results[.,2]);
+mean_entr_prob_40[ppp]=meanc(counterf_results_40[.,1]);
+mean_inc_mkt_share_40[ppp]=meanc(counterf_results_40[.,2]); 
+
+
+
+
+thetas_CS=thetas_confidence_set[ppp,.]';
+
+
+betas_CS=thetas_CS[1:k_covar];
+gammma_CS=thetas_CS[k_covar+1];
+delta_CS=thetas_CS[k_covar+2];
+capital_delta_CS=thetas_CS[k_covar+3];
+eta_CS=thetas_CS[k_covar+4];
+zetta_CS=eta_CS*gammma_CS;
+
+
+index_counterf=ln((share_incumbent_market)./(1-share_incumbent_market))+gammma_CS*(number_entrants_market-(number_entrants_market+1));
+
+one_more_entrant_counterfactual[ppp]=sumc((exp(index_counterf)./(1+exp(index_counterf))-share_incumbent_market).*(number_entrants_market .lt 3))/sumc(number_entrants_market .lt 3);
+
+
+/*SIMPLE COUNTERFACTUAL WHERE WE INCREASE EXOGENOUSLY THE INCUMBENT'S MARKET SHARE BY "tau" PERCENTAGE POINTS
+AND WE ESTIMATE THE AVERAGE VALUE OF THE PROBABILITY OF ENTRY WITHOUT RE-COMPUTING THE NEW BNE*/
+original_entry_probabilities=simple_counterfactual_first(thetas_CS,0);
+simple_counterf_entry_prob_01[ppp]=meanc(simple_counterfactual_first(thetas_CS,0.01)-original_entry_probabilities);
+simple_counterf_entry_prob_02[ppp]=meanc(simple_counterfactual_first(thetas_CS,0.02)-original_entry_probabilities);
+simple_counterf_entry_prob_05[ppp]=meanc(simple_counterfactual_first(thetas_CS,0.05)-original_entry_probabilities);
+simple_counterf_entry_prob_10[ppp]=meanc(simple_counterfactual_first(thetas_CS,0.10)-original_entry_probabilities);
+
+median_counterf_entry_prob_01[ppp]=median(simple_counterfactual_first(thetas_CS,0.01)-original_entry_probabilities);
+median_counterf_entry_prob_02[ppp]=median(simple_counterfactual_first(thetas_CS,0.02)-original_entry_probabilities);
+median_counterf_entry_prob_05[ppp]=median(simple_counterfactual_first(thetas_CS,0.05)-original_entry_probabilities);
+median_counterf_entry_prob_10[ppp]=median(simple_counterfactual_first(thetas_CS,0.10)-original_entry_probabilities);
+
+
+/*SIMPLE COUNTERFACTUAL WHERE WE INCREASE EXOGENOUSLY THE PROBABILITY OF ENTRY BY "tau" PERCENTAGE POINTS
+AND WE ESTIMATE THE AVERAGE VALUE OF THE EXPECTED MARKET SHARE FOR THE INCUMBENT WITHOUT RE-COMPUTING THE BNE*/
+
+original_mu_S=simple_counterfactual_second(thetas_CS,0);
+
+simple_counterf_mu_S_01[ppp]=meanc(simple_counterfactual_second(thetas_CS,0.01)-original_mu_S);
+simple_counterf_mu_S_02[ppp]=meanc(simple_counterfactual_second(thetas_CS,0.02)-original_mu_S);
+simple_counterf_mu_S_05[ppp]=meanc(simple_counterfactual_second(thetas_CS,0.05)-original_mu_S);
+simple_counterf_mu_S_10[ppp]=meanc(simple_counterfactual_second(thetas_CS,0.10)-original_mu_S);
+
+median_counterf_mu_S_01[ppp]=median(simple_counterfactual_second(thetas_CS,0.01)-original_mu_S);
+median_counterf_mu_S_02[ppp]=median(simple_counterfactual_second(thetas_CS,0.02)-original_mu_S);
+median_counterf_mu_S_05[ppp]=median(simple_counterfactual_second(thetas_CS,0.05)-original_mu_S);
+median_counterf_mu_S_10[ppp]=median(simple_counterfactual_second(thetas_CS,0.10)-original_mu_S);
+
+simple_counterf_prop_mu_S_01[ppp]=meanc((simple_counterfactual_second(thetas_CS,0.01)-original_mu_S)./original_mu_S);
+simple_counterf_prop_mu_S_02[ppp]=meanc((simple_counterfactual_second(thetas_CS,0.02)-original_mu_S)./original_mu_S);
+simple_counterf_prop_mu_S_05[ppp]=meanc((simple_counterfactual_second(thetas_CS,0.05)-original_mu_S)./original_mu_S);
+simple_counterf_prop_mu_S_10[ppp]=meanc((simple_counterfactual_second(thetas_CS,0.10)-original_mu_S)./original_mu_S);
+
+median_counterf_prop_mu_S_01[ppp]=median((simple_counterfactual_second(thetas_CS,0.01)-original_mu_S)./original_mu_S);
+median_counterf_prop_mu_S_02[ppp]=median((simple_counterfactual_second(thetas_CS,0.02)-original_mu_S)./original_mu_S);
+median_counterf_prop_mu_S_05[ppp]=median((simple_counterfactual_second(thetas_CS,0.05)-original_mu_S)./original_mu_S);
+median_counterf_prop_mu_S_10[ppp]=median((simple_counterfactual_second(thetas_CS,0.10)-original_mu_S)./original_mu_S);
+
+
+BNE_entry_probability_10_quant[ppp]=quantile(original_entry_probabilities,0.10);
+BNE_entry_probability_25_quant[ppp]=quantile(original_entry_probabilities,0.25);
+BNE_entry_probability_50_quant[ppp]=quantile(original_entry_probabilities,0.50);
+BNE_entry_probability_75_quant[ppp]=quantile(original_entry_probabilities,0.75);
+BNE_entry_probability_90_quant[ppp]=quantile(original_entry_probabilities,0.90);
+
+
+BNE_mu_S_10_quant[ppp]=quantile(original_mu_S,0.10);
+BNE_mu_S_25_quant[ppp]=quantile(original_mu_S,0.25);
+BNE_mu_S_50_quant[ppp]=quantile(original_mu_S,0.50);
+BNE_mu_S_75_quant[ppp]=quantile(original_mu_S,0.75);
+BNE_mu_S_90_quant[ppp]=quantile(original_mu_S,0.90);
+
+
+
+integrated_min_jacobian_0[ppp]=jacobian_BNE_uniqueness(thetas_CS);
+
+ppp=ppp+1;
+
+endo;    
+
+
+
+proc simple_counterfactual_first(b,z);
+local P, sm, c, betas, gammma, delta, capital_delta, eta, zetta, i, t0;
+local BNE_pais, BNE_conditions, pai_0, pai_new, k;
+local nabla_mu_pi, mu, index_mu, index_t, index_t_BNE, G_index_t_BNE, q;
+local F_pai, nabla_pi_F, pai_k, mu_new, index_t_new, BNE_system;
+local F_Y, covars, probab_entry;
+local maximum_number_BNE;
+local alpha_component_counterf, change_in_alpha;
+local counterf_entry_probability, counterf_expected_incumb_share;
+local change_in_mu_s;
+
+change_in_mu_s=z[1];    
+
+P=players;
+F_Y=zeros(n,1);
+
+counterf_entry_probability=zeros(n,1);
+counterf_expected_incumb_share=zeros(n,1);   
+    
+maximum_number_BNE=1;
+
+betas=b[1:k_covar];
+gammma=b[k_covar+1];
+delta=b[k_covar+2];
+capital_delta=b[k_covar+3];
+eta=b[k_covar+4];
+zetta=eta*gammma;
+
+
+i=1;
+do while i .le n;
+
+sm=share_incumbent_market[i];
+c=number_entrants_market[i];
+covars=X_covariates[i,.];
+
+t0=covars*betas;
+
+
+
+/*We search for "maximum_number_BNE" BNE*/
+BNE_pais=zeros(maximum_number_BNE,1);
+BNE_conditions=zeros(maximum_number_BNE,1);
+index_t_BNE=zeros(maximum_number_BNE,1);
+G_index_t_BNE=zeros(maximum_number_BNE,1);
+
+
+pai_0=0.5;
+
+pai_new=pai_0;
+
+
+k=1;
+do while k .le BNE_steps;
+    
+if k .eq 1;
+pai_k=pai_0;
+else;
+pai_k=pai_new;
+endif;    
+
+
+nabla_mu_pi=0;
+mu=0;
+
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+nabla_mu_pi=nabla_mu_pi+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*((q/pai_k)-(P-1-q)/(1-pai_k))*exp(index_mu)/(1+exp(index_mu));
+mu=mu+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t=t0-delta*mu-capital_delta*(P-1)*pai_k+eta*ln(sm/(1-sm))+zetta*c;
+
+F_pai=exp(index_t)/(1+exp(index_t));
+nabla_pi_F=1-exp(index_t)/((1+exp(index_t))^2)*(-delta*nabla_mu_pi-capital_delta*(P-1));
+
+pai_new=pai_k-(1/nabla_pi_F)*(pai_k-F_pai);
+
+q=0;
+mu_new=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+mu_new=mu_new+((P-1)!/((P-1-q)!*q!))*(pai_new^q)*((1-pai_new)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t_new=t0-delta*mu_new-capital_delta*(P-1)*pai_new+eta*ln(sm/(1-sm))+zetta*c;
+
+BNE_system=abs(pai_new-exp(index_t_new)/(1+exp(index_t_new)));
+
+k=k+1;
+endo;
+
+index_t_new=t0-delta*(mu_new+change_in_mu_s)-capital_delta*(P-1)*pai_new+eta*ln(sm/(1-sm))+zetta*c;
+
+  
+BNE_pais=pai_new;
+BNE_conditions=BNE_system;
+index_t_BNE=index_t_new;
+G_index_t_BNE=exp(index_t_new)/(1+exp(index_t_new));
+
+
+probab_entry=G_index_t_BNE;
+
+counterf_entry_probability[i]=probab_entry;
+counterf_expected_incumb_share[i]=mu_new;
+
+i=i+1;
+
+endo;
+
+
+retp(counterf_entry_probability);
+endp;
+
+
+proc simple_counterfactual_second(b,z);
+local P, sm, c, betas, gammma, delta, capital_delta, eta, zetta, i, t0;
+local BNE_pais, BNE_conditions, pai_0, pai_new, k;
+local nabla_mu_pi, mu, index_mu, index_t, index_t_BNE, G_index_t_BNE, q;
+local F_pai, nabla_pi_F, pai_k, mu_new, index_t_new, BNE_system;
+local F_Y, covars, probab_entry;
+local maximum_number_BNE;
+local alpha_component_counterf, change_in_alpha;
+local counterf_entry_probability, counterf_expected_incumb_share;
+local mu_S_vector, change_in_entry_prob;
+
+change_in_entry_prob=z[1];    
+
+P=players;
+F_Y=zeros(n,1);
+
+mu_S_vector=zeros(n,1);
+
+counterf_entry_probability=zeros(n,1);
+counterf_expected_incumb_share=zeros(n,1);   
+    
+maximum_number_BNE=1;
+
+betas=b[1:k_covar];
+gammma=b[k_covar+1];
+delta=b[k_covar+2];
+capital_delta=b[k_covar+3];
+eta=b[k_covar+4];
+zetta=eta*gammma;
+
+
+i=1;
+do while i .le n;
+
+sm=share_incumbent_market[i];
+c=number_entrants_market[i];
+covars=X_covariates[i,.];
+
+t0=covars*betas;
+
+
+
+/*We search for "maximum_number_BNE" BNE*/
+BNE_pais=zeros(maximum_number_BNE,1);
+BNE_conditions=zeros(maximum_number_BNE,1);
+index_t_BNE=zeros(maximum_number_BNE,1);
+G_index_t_BNE=zeros(maximum_number_BNE,1);
+
+
+pai_0=0.5;
+
+pai_new=pai_0;
+
+
+k=1;
+do while k .le BNE_steps;
+    
+if k .eq 1;
+pai_k=pai_0;
+else;
+pai_k=pai_new;
+endif;    
+
+
+nabla_mu_pi=0;
+mu=0;
+
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+nabla_mu_pi=nabla_mu_pi+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*((q/pai_k)-(P-1-q)/(1-pai_k))*exp(index_mu)/(1+exp(index_mu));
+mu=mu+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t=t0-delta*mu-capital_delta*(P-1)*pai_k+eta*ln(sm/(1-sm))+zetta*c;
+
+F_pai=exp(index_t)/(1+exp(index_t));
+nabla_pi_F=1-exp(index_t)/((1+exp(index_t))^2)*(-delta*nabla_mu_pi-capital_delta*(P-1));
+
+pai_new=pai_k-(1/nabla_pi_F)*(pai_k-F_pai);
+
+pai_new=pai_new+change_in_entry_prob;
+pai_new=minc(pai_new|1);
+
+q=0;
+mu_new=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+mu_new=mu_new+((P-1)!/((P-1-q)!*q!))*(pai_new^q)*((1-pai_new)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t_new=t0-delta*mu_new-capital_delta*(P-1)*pai_new+eta*ln(sm/(1-sm))+zetta*c;
+
+BNE_system=abs(pai_new-exp(index_t_new)/(1+exp(index_t_new)));
+
+k=k+1;
+endo;
+
+index_t_new=t0-delta*(mu_new)-capital_delta*(P-1)*pai_new+eta*ln(sm/(1-sm))+zetta*c;
+
+  
+BNE_pais=pai_new;
+BNE_conditions=BNE_system;
+index_t_BNE=index_t_new;
+G_index_t_BNE=exp(index_t_new)/(1+exp(index_t_new));
+
+
+probab_entry=G_index_t_BNE;
+
+counterf_entry_probability[i]=probab_entry;
+counterf_expected_incumb_share[i]=mu_new;
+
+mu_S_vector[i]=mu_new;
+
+i=i+1;
+
+endo;
+
+
+retp(mu_S_vector);
+endp;
+
+
+
+proc jacobian_BNE_system(b);
+local P, sm, c, betas, gammma, delta, capital_delta, eta, zetta, i, t0;
+local BNE_pais, BNE_conditions, pai_0, pai_new, k;
+local nabla_mu_pi, mu, index_mu, index_t, index_t_BNE, G_index_t_BNE, q;
+local pai_k, F_Y, covars;
+local maximum_number_BNE;
+local alpha_component_counterf;
+local counterf_entry_probability, counterf_expected_incumb_share;
+local integrated_jacobian, integrated_jacobian_vector, average_integrated_jacobian;
+
+P=players;
+F_Y=zeros(n,1);
+integrated_jacobian_vector=zeros(n,1);
+
+counterf_entry_probability=zeros(n,1);
+counterf_expected_incumb_share=zeros(n,1);   
+    
+maximum_number_BNE=1;
+
+betas=b[1:k_covar];
+gammma=b[k_covar+1];
+delta=b[k_covar+2];
+capital_delta=b[k_covar+3];
+eta=b[k_covar+4];
+zetta=eta*gammma;
+
+alpha_component_counterf=abs(ln(share_incumbent_market./(1-share_incumbent_market))+gammma*number_entrants_market);
+
+
+
+i=1;
+do while i .le n;
+
+sm=share_incumbent_market[i];
+c=number_entrants_market[i];
+covars=X_covariates[i,.];
+
+t0=covars*betas;
+
+
+
+/*We search for "maximum_number_BNE" BNE*/
+BNE_pais=zeros(maximum_number_BNE,1);
+BNE_conditions=zeros(maximum_number_BNE,1);
+index_t_BNE=zeros(maximum_number_BNE,1);
+G_index_t_BNE=zeros(maximum_number_BNE,1);
+
+
+pai_0=0.5;
+
+pai_new=pai_0;
+
+integrated_jacobian=0;
+
+k=1;
+do while k .le rows(aux_pi_grid);
+    
+pai_k=aux_pi_grid[k];
+    
+nabla_mu_pi=0;
+mu=0;
+
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+nabla_mu_pi=nabla_mu_pi+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*((q/pai_k)-(P-1-q)/(1-pai_k))*exp(index_mu)/(1+exp(index_mu));
+mu=mu+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t=t0-delta*mu-capital_delta*(P-1)*pai_k+eta*ln(sm/(1-sm))+zetta*c;
+
+integrated_jacobian=integrated_jacobian+minc(1+(exp(index_t)/((1+exp(index_t))^2))*(delta*nabla_mu_pi+capital_delta*(P-1))|0);
+
+k=k+1;
+endo;
+
+integrated_jacobian_vector[i]=(1/rows(aux_pi_grid))*integrated_jacobian;
+
+i=i+1;
+
+endo;
+
+
+retp(meanc(integrated_jacobian_vector));
+endp;
+
+
+proc jacobian_BNE_uniqueness(b);
+local P, sm, c, betas, gammma, delta, capital_delta, eta, zetta, i, t0;
+local BNE_pais, BNE_conditions, pai_0, pai_new, k;
+local nabla_mu_pi, mu, index_mu, index_t_k, index_t_k_minus_one, index_t_BNE, G_index_t_BNE, q;
+local pai_k, pai_k_minus_one, F_Y, covars;
+local maximum_number_BNE;
+local alpha_component_counterf;
+local counterf_entry_probability, counterf_expected_incumb_share;
+local integrated_jacobian, integrated_jacobian_vector, average_integrated_jacobian;
+
+P=players;
+F_Y=zeros(n,1);
+integrated_jacobian_vector=zeros(n,1);
+
+counterf_entry_probability=zeros(n,1);
+counterf_expected_incumb_share=zeros(n,1);   
+    
+maximum_number_BNE=1;
+
+betas=b[1:k_covar];
+gammma=b[k_covar+1];
+delta=b[k_covar+2];
+capital_delta=b[k_covar+3];
+eta=b[k_covar+4];
+zetta=eta*gammma;
+
+alpha_component_counterf=abs(ln(share_incumbent_market./(1-share_incumbent_market))+gammma*number_entrants_market);
+
+
+
+i=1;
+do while i .le n;
+
+sm=share_incumbent_market[i];
+c=number_entrants_market[i];
+covars=X_covariates[i,.];
+
+t0=covars*betas;
+
+
+
+/*We search for "maximum_number_BNE" BNE*/
+BNE_pais=zeros(maximum_number_BNE,1);
+BNE_conditions=zeros(maximum_number_BNE,1);
+index_t_BNE=zeros(maximum_number_BNE,1);
+G_index_t_BNE=zeros(maximum_number_BNE,1);
+
+
+pai_0=0.5;
+
+pai_new=pai_0;
+
+integrated_jacobian=0;
+
+k=2;
+do while k .le rows(aux_pi_grid);
+    
+pai_k=aux_pi_grid[k];
+    
+nabla_mu_pi=0;
+mu=0;
+
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+nabla_mu_pi=nabla_mu_pi+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*((q/pai_k)-(P-1-q)/(1-pai_k))*exp(index_mu)/(1+exp(index_mu));
+mu=mu+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t_k=t0-delta*mu-capital_delta*(P-1)*pai_k+eta*ln(sm/(1-sm))+zetta*c;
+
+
+pai_k_minus_one=aux_pi_grid[k-1];
+    
+nabla_mu_pi=0;
+mu=0;
+
+q=0;
+do while q .le P-1;
+index_mu=ln(sm/(1-sm))+gammma*(c-(q+1));    
+nabla_mu_pi=nabla_mu_pi+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*((q/pai_k)-(P-1-q)/(1-pai_k))*exp(index_mu)/(1+exp(index_mu));
+mu=mu+((P-1)!/((P-1-q)!*q!))*(pai_k^q)*((1-pai_k)^(P-1-q))*exp(index_mu)/(1+exp(index_mu));
+q=q+1;
+endo;
+
+index_t_k_minus_one=t0-delta*mu-capital_delta*(P-1)*pai_k+eta*ln(sm/(1-sm))+zetta*c;
+
+
+integrated_jacobian=integrated_jacobian+minc(((pai_k-exp(index_t_k)/(1+exp(index_t_k)))-(pai_k_minus_one-exp(index_t_k_minus_one)/(1+exp(index_t_k_minus_one))))/(pai_k-pai_k_minus_one)|0);
+
+
+k=k+1;
+endo;
+
+integrated_jacobian_vector[i]=(1/rows(aux_pi_grid))*integrated_jacobian;
+
+i=i+1;
+
+endo;
+
+
+retp(meanc(integrated_jacobian_vector));
+endp;
+
+
+cov_gamma_delta_capital_delta=
+(var_cov_matrix_analytical[k_covar+1,k_covar+1]~var_cov_matrix_analytical[k_covar+1,k_covar+2]~var_cov_matrix_analytical[k_covar+1,k_covar+3])|
+(var_cov_matrix_analytical[k_covar+1,k_covar+2]~var_cov_matrix_analytical[k_covar+2,k_covar+2]~var_cov_matrix_analytical[k_covar+2,k_covar+3])|
+(var_cov_matrix_analytical[k_covar+1,k_covar+3]~var_cov_matrix_analytical[k_covar+2,k_covar+3]~var_cov_matrix_analytical[k_covar+3,k_covar+3]);
+
+
+gammma_delta_over_cap_delta=(gammma_hat+delta_hat)/capital_delta_hat;
+
+J_gammma_delta_over_cap_delta=(1/capital_delta_hat)~(1/capital_delta_hat)~(-(gammma_hat+delta_hat)/(capital_delta_hat^2));
+
+Var_gammma_delta_over_cap_delta=J_gammma_delta_over_cap_delta*cov_gamma_delta_capital_delta*J_gammma_delta_over_cap_delta';
+
+SE_gammma_delta_over_cap_delta=sqrt(Var_gammma_delta_over_cap_delta);
+
+CI_gammma_delta_over_cap_delta=gammma_delta_over_cap_delta-cdfni(0.975)*SE_gammma_delta_over_cap_delta~gammma_delta_over_cap_delta+cdfni(0.975)*SE_gammma_delta_over_cap_delta;
+
+/*TESTING THAT gamma_0=delta_0=Delta_0 (all strategic coefficients are the same)*/
+B_matrix=(-1~0~1)|(0~-1~1);
+
+wald_stat_equal_strategic_param=(B_matrix*(gammma_hat|delta_hat|capital_delta_hat))'*inv(B_matrix*cov_gamma_delta_capital_delta*B_matrix')*(B_matrix*(gammma_hat|delta_hat|capital_delta_hat));
+
+
+/*OUR ESTIMATES FOR ALL PARAMETERS AND A 95% CONFIDENCE INTERVAL FOR EACH (RESULTS IN TABLE 3 IN THE PAPER)*/
+estimates_and_confid_intervals=estimates~conf_intervals_analytical;
+
+t0_hat=X_covariates*betas_hat;
+
+/*Summary of results from the test of strategic behavior by the incumbent (TABLE 4 IN THE PAPER)*/
+summary_test_strategic_incumbent=t_stat_foc_incumbent_analytical~cdfn(t_stat_foc_incumbent_analytical);
+
+
+/*Summary of results from first counterfactual experiment (TABLE 5 IN THE PAPER)*/
+summary_counterf_delta_mu_s=
+(minc(median_counterf_entry_prob_01)~maxc(median_counterf_entry_prob_01))~
+(minc(median_counterf_entry_prob_02)~maxc(median_counterf_entry_prob_02))~
+(minc(median_counterf_entry_prob_05)~maxc(median_counterf_entry_prob_05))~
+(minc(median_counterf_entry_prob_10)~maxc(median_counterf_entry_prob_10));
+
+/*Summary of results from second counterfactual experiment (TABLE 6 IN THE PAPER)*/
+summary_counterf_tau=
+((minc(mean_ch_entr_prob_05)~maxc(mean_ch_entr_prob_05))~(minc(mean_ch_entr_prob_15)~maxc(mean_ch_entr_prob_15))~(minc(mean_ch_entr_prob_25)~maxc(mean_ch_entr_prob_25))~(minc(mean_ch_entr_prob_35)~maxc(mean_ch_entr_prob_35)))|
+((minc(mean_ch_inc_mkt_share_05)~maxc(mean_ch_inc_mkt_share_05))~(minc(mean_ch_inc_mkt_share_15)~maxc(mean_ch_inc_mkt_share_15))~(minc(mean_ch_inc_mkt_share_25)~maxc(mean_ch_inc_mkt_share_25))~(minc(mean_ch_inc_mkt_share_35)~maxc(mean_ch_inc_mkt_share_35)));
+
+
+if hsec .gt tinit;
+total_time=hsec-tinit;
+else;
+total_time=24*60*60-tinit+hsec;
+endif;
+
+total_time_minutes=total_time/(100*60);
+total_time_hours=total_time/(100*60*60);
