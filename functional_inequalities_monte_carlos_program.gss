@@ -1,0 +1,313 @@
+rndseed 28375547;
+
+tinit=hsec;
+
+c_h=0.70;
+c_b=0.75;
+c_tau=10^-10;
+alpha_h=1/9;
+support=1.0;
+alpha_b=1/4+10^-3;
+
+alpha_h=1/8-(10^-5);
+alpha_b=1/4+0.75*(10^-5);
+c_tau=10^-5;
+
+
+triweight_kernel=0; 
+
+simulations=2000;
+
+/*sample_sizes=100|250|500|1000|2000|3000;*/
+
+sample_sizes=4000;
+
+dgps=1|-10|4|5|7|8;
+
+/*dgps=-10|0|-20|-1;*/
+
+rejection_rates_results=zeros(rows(sample_sizes),rows(dgps));
+
+smallest_test_statistic=zeros(rows(sample_sizes),rows(dgps));
+
+largest_test_statistic=zeros(rows(sample_sizes),rows(dgps));
+
+
+ddgp=1;
+do while ddgp .le rows(dgps);
+
+dgp=dgps[ddgp];
+    
+nn=1;
+do while nn .le rows(sample_sizes);
+
+n=sample_sizes[nn];    
+
+
+t1_stat_simulations=zeros(simulations,1);
+reject_simulations=zeros(simulations,1);
+
+ss=1;
+do while ss .le simulations;
+
+X1=rndn(n,1);
+X2_aux=rndu(n,1);
+X2=ln((X2_aux)./(1-X2_aux));
+X3=exp(rndn(n,1));
+X4=rndu(n,1)-rndu(n,1);
+
+X5=rndn(n,1);
+X6_aux=rndu(n,1);
+X6=ln((X6_aux)./(1-X6_aux));
+X7=exp(rndn(n,1));
+X8=rndu(n,1)-rndu(n,1);
+
+f1_X=-X1+X2+X3+X4;
+f2_X=-X5+X6+X7+X8;
+        
+
+epsilon_1=rndn(n,1);
+epsilon_2=rndn(n,1);
+
+
+
+if dgp .eq 1;
+    Y1=maxc((f1_X~f2_X)')+epsilon_1;
+    Y2=minc((f1_X~f2_X)')+epsilon_2;
+elseif dgp .eq -10;
+    Y1=f1_X+epsilon_1; /*Both equal*/
+    Y2=f1_X+epsilon_2;
+elseif dgp .eq 2;
+    Y1=maxc((f1_X+4~f2_X-2)')+epsilon_1; /*Prob(f1_X+4 .ge f2_X-2)=0.94*/
+    Y2=f2_X-2+epsilon_2;
+elseif dgp .eq 0;
+    Y1=maxc((f1_X~f2_X)')+epsilon_1; /*Prob(f1_X .ge f2_X)=0.50*/
+    Y2=f2_X+epsilon_2;
+elseif dgp .eq -1;
+    Y1=maxc((f1_X+1.8~f2_X-2)')+epsilon_1; /*Prob(f1_X .ge f2_X)=0.85*/
+    Y2=f2_X-2+epsilon_2;    
+elseif dgp .eq -2;
+    Y1=maxc((f1_X+3~f2_X-2)')+epsilon_1; /*Prob(f1_X .ge f2_X)=0.90*/
+    Y2=f2_X-2+epsilon_2;  
+elseif dgp .eq -20;
+    Y1=maxc((f1_X+1.5~f2_X-1)')+epsilon_1; /*Prob(f1_X .ge f2_X)=0.75*/
+    Y2=f2_X-1+epsilon_2;    
+elseif dgp .eq 3;
+    Y1=maxc((f1_X+4.5~f2_X-2)')+epsilon_1; /*Prob(f1_X+4.5 .ge f2_X-2)=0.95*/
+    Y2=f2_X-2+epsilon_2;
+elseif dgp .eq 4;    
+    Y1=f1_X+epsilon_1;
+    Y2=maxc((f1_X~f2_X)')+epsilon_2; /*Prob(f1_X .le f2_X)=0.50*/
+elseif dgp .eq 5;
+    Y1=f1_X+1.5+epsilon_1;
+    Y2=maxc((f1_X+1.5~f2_X-1.5)')+epsilon_2; /*Prob(f1_X+1.5 .le f2_X-1.5)=0.20*/    
+elseif dgp .eq 6;
+    Y1=f1_X+2.75+epsilon_1;
+    Y2=maxc((f1_X+2.75~f2_X-2)')+epsilon_2; /*Prob(f1_X+2.75 .le f2_X-2)=0.10*/
+elseif dgp .eq 7;
+    Y1=f1_X+4.5+epsilon_1;
+    Y2=maxc((f1_X+4.5~f2_X-2)')+epsilon_2; /*Prob(f1_X+4.5 .le f2_X-2)=0.05*/
+elseif dgp .eq 8;
+    Y1=f1_X+5+epsilon_1;
+    Y2=maxc((f1_X+5~f2_X-5)')+epsilon_2; /*Prob(f1_X+5 .le f2_X-5)=0.01*/
+endif;
+
+
+
+X_matrix=X1~X2~X3~X4~X5~X6~X7~X8;
+
+
+theta_hat=inv(X_matrix'*X_matrix)*X_matrix'*(Y1-Y2);
+
+nu_vector=(Y1-Y2)-X_matrix*theta_hat;
+
+psi_theta_hat=((X_matrix).*(nu_vector))*inv((1/n)*(X_matrix'*X_matrix)); /*Matrix-form of the influence function of the OLS estimator*/
+
+
+g_index=X_matrix*theta_hat;
+
+
+h_n=c_h*stdc(g_index)*n^(-alpha_h);
+
+
+
+LB=maxc(quantile(Y1,0.01)|quantile(Y2,0.01));
+UB=minc(quantile(Y1,0.99)|quantile(Y2,0.99));
+
+
+/*t=(Y1+Y2)/2;*/
+
+/*t=Y2;*/
+
+t=Y1;
+
+/*t=Y2;*/
+
+t_quantile=0.005;
+
+omega_g_index=(quantile(g_index,t_quantile) .le g_index).*(g_index .le quantile(g_index,1-t_quantile));
+phi_X_t=(quantile(sumc(X_matrix'),t_quantile).le sumc(X_matrix')).*(sumc(X_matrix') .le quantile(sumc(X_matrix'),1-t_quantile)).*(quantile(t,t_quantile).le t).*(t .le quantile(t,1-t_quantile));
+
+t_matrix=ones(n,n).*(t');
+
+S_matrix=(Y1 .le t_matrix)-(Y2 .le t_matrix);
+
+abs_S_matrix=abs(S_matrix);
+
+varsigma_bar=meanc(meanc(abs_S_matrix));
+
+/*varsigma_bar=sqrt(meanc(meanc(abs_S_matrix^2)));*/ /*OJO: CAMBIE ESTO*/
+varsigma_bar=1;
+
+b_n=c_b*varsigma_bar*n^(-alpha_b);
+
+/*b_n=c_b*varsigma_bar*n^(-alpha_b);*/
+
+tau_n=c_tau*varsigma_bar;
+
+/*Bias reducing kernels of order M=6*/
+
+if triweight_kernel .eq 1;
+
+if support .eq 1/4;
+    c1=24640;
+    c2=-697016320;
+    c3=9747076218880/3;
+elseif support .eq 1/2;
+    c1=385/2;
+    c2=-85085;
+    c3=37182145/6;
+elseif support .eq 1;
+    c1=385/256;
+    c2=-(85085/8192);
+    c3=37182145/3145728;
+elseif support .eq 2;
+    c1=385/32768;
+    c2=-(85085/67108864);
+    c3=37182145/1649267441664;
+elseif support .eq 5;
+    c1=77/4000000;
+    c2=-(17017/2000000000000);
+    c3=7436429/12000000000000000000;
+elseif support .eq 10;
+    c1=77/512000000;
+    c2=-(17017/16384000000000000);
+    c3=7436429/6291456000000000000000000;
+endif;    
+    
+
+else;
+
+if support .eq 1/4;
+    c1=1890;
+    c2=-2882880;
+    c3=784143360;
+elseif support .eq 1/2;
+    c1=945/16;
+    c2=-(45045/8);
+    c3=765765/8;    
+elseif support .eq 1;
+    c1=945/512;
+    c2=-(45045/4096);
+    c3=765765/65536;
+elseif support .eq 2;
+    c1=945/16384;
+    c2=-(45045/2097152);
+    c3=765765/536870912;
+elseif support .eq 5;
+    c1=189/320000;
+    c2=-(9009/1600000000);
+    c3=153153/16000000000000;
+elseif support .eq 10;
+    c1=189/10240000;
+    c2=-(9009/819200000000);
+    c3=153153/131072000000000000;
+endif;
+
+endif;
+
+psi_matrix=(g_index-ones(n,n).*(g_index'))/h_n;
+
+if triweight_kernel .eq 1;
+    
+kernel_matrix=(1/h_n)*(c1*(support^2-psi_matrix^2)^3+c2*(support^2-psi_matrix^2)^6+c3*(support^2-psi_matrix^2)^9).*(abs(psi_matrix) .le support);
+
+kernel_prime_matrix=(1/h_n^2)*(-6*(support^2-psi_matrix^2).*psi_matrix.*(c1+2*c2*(support^2-psi_matrix^2)^4+3*c3*(support^2-psi_matrix^2)^7).*(abs(psi_matrix) .le support));    
+
+else;    
+
+kernel_matrix=(1/h_n)*(c1*(support^2-psi_matrix^2)^2+c2*(support^2-psi_matrix^2)^4+c3*(support^2-psi_matrix^2)^6).*(abs(psi_matrix) .le support);
+
+kernel_prime_matrix=(1/h_n^2)*(-4*(support^2-psi_matrix^2).*psi_matrix.*(c1+2*c2*(support^2-psi_matrix^2)^2+3*c3*(support^2-psi_matrix^2)^4).*(abs(psi_matrix) .le support));
+
+endif;
+
+R_hat_vector=meanc(S_matrix.*omega_g_index.*kernel_matrix);
+
+f_hat_g_vector=meanc(kernel_matrix);
+
+Q_hat_vector=(R_hat_vector)./f_hat_g_vector;
+
+Gamma_hat_vector=meanc(S_matrix.*kernel_matrix)./f_hat_g_vector;
+
+T1_hat=meanc(Q_hat_vector.*(Q_hat_vector .ge -b_n).*phi_X_t);
+
+Psi_Q_hat_matrix=zeros(n,cols(X_matrix));
+
+i=1;
+do while i .le n;
+   
+    Psi_Q_hat_matrix[i,.]=-(meanc((S_matrix[.,i].*omega_g_index-Q_hat_vector[i]).*(X_matrix[i,.].*ones(n,cols(X_matrix))-X_matrix).*kernel_prime_matrix[.,i]))'/f_hat_g_vector[i];
+
+i=i+1;
+endo;
+
+
+Psi_hat_T1=meanc((Q_hat_vector .ge -b_n).*(phi_X_t).*Psi_Q_hat_matrix); /*kx1 column vector*/
+
+
+Omega_hat_T1=zeros(n,1);
+
+i=1;
+do while i .le n;
+    Omega_hat_T1[i]=meanc((((Y1[i] .le t)-(Y2[i] .le t))-Gamma_hat_vector).*phi_X_t.*(Q_hat_vector .ge -b_n).*kernel_matrix[.,i])/f_hat_g_vector[i];
+i=i+1;
+endo;
+
+
+psi_T1=(Q_hat_vector.*(Q_hat_vector .ge -b_n).*phi_X_t-T1_hat)+Omega_hat_T1.*omega_g_index+psi_theta_hat*Psi_hat_T1;    
+    
+t1_statistic=sqrt(n)*T1_hat/maxc(stdc(psi_T1)|tau_n);
+
+
+t1_stat_simulations[ss]=t1_statistic;
+reject_simulations[ss]=(t1_statistic .ge cdfni(0.95));
+
+ss=ss+1;
+endo;
+
+rejection_rates_results[nn,ddgp]=meanc(reject_simulations);
+
+smallest_test_statistic[nn,ddgp]=minc(t1_stat_simulations);
+
+largest_test_statistic[nn,ddgp]=maxc(t1_stat_simulations);
+
+nn=nn+1;
+endo;
+
+ddgp=ddgp+1;
+endo;
+
+if hsec .ge tinit;
+
+totaltime_minutes=((hsec-tinit)/100)/60;
+
+totaltime_hours=totaltime_minutes/60;
+
+else;
+    
+totaltime_minutes=((hsec+(8640000-tinit))/100)/60;
+
+totaltime_hours=totaltime_minutes/60;
+
+endif;    
