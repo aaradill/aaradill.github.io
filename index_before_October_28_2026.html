@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Andres Aradillas-Lopez</title>
+<style>
+  :root{
+    --navy:#1b2a4a;
+    --navy-dark:#101b33;
+    --accent:#8a1538; /* Penn State-ish maroon accent, distinct from pure PSU blue */
+    --blue:#13294b;
+    --bg:#f6f7f9;
+    --card:#ffffff;
+    --text:#2a2f36;
+    --muted:#5b6472;
+    --border:#e3e6eb;
+    --maxw:980px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:"Georgia","Iowan Old Style", "Palatino Linotype", serif;
+    background:var(--bg);
+    color:var(--text);
+    line-height:1.6;
+  }
+  a{color:var(--blue); text-decoration:none;}
+  a:hover{text-decoration:underline; color:var(--accent);}
+
+  header.hero{
+    background:linear-gradient(135deg, var(--navy) 0%, var(--navy-dark) 100%);
+    color:#fff;
+    padding:48px 24px 60px;
+  }
+  .hero-inner{
+    max-width:var(--maxw);
+    margin:0 auto;
+    display:flex;
+    align-items:center;
+    gap:32px;
+    flex-wrap:wrap;
+  }
+  .hero-photo img{
+    width:170px;
+    height:170px;
+    object-fit:cover;
+    border-radius:12px;
+    border:4px solid rgba(255,255,255,0.15);
+    box-shadow:0 10px 30px rgba(0,0,0,0.35);
+    display:block;
+  }
+  .hero-text h1{
+    margin:0 0 4px;
+    font-size:2.1rem;
+    font-weight:700;
+    letter-spacing:0.2px;
+  }
+  .hero-text h2{
+    margin:0 0 18px;
+    font-weight:400;
+    font-size:1.15rem;
+    color:#d7dce6;
+  }
+  .hero-text a.cv-btn{
+    display:inline-block;
+    background:var(--accent);
+    color:#fff;
+    padding:9px 18px;
+    border-radius:6px;
+    font-family:"Helvetica Neue", Arial, sans-serif;
+    font-size:0.92rem;
+    font-weight:600;
+    letter-spacing:0.3px;
+    transition:background 0.15s ease, transform 0.15s ease;
+  }
+  .hero-text a.cv-btn:hover{
+    background:#6e1029;
+    text-decoration:none;
+    transform:translateY(-1px);
+  }
+
+  .wrap{
+    max-width:var(--maxw);
+    margin:-34px auto 0;
+    padding:0 24px 60px;
+  }
+
+  .contact-card{
+    background:var(--card);
+    border-radius:10px;
+    box-shadow:0 8px 24px rgba(20,30,60,0.08);
+    padding:22px 28px;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px 32px;
+    font-family:"Helvetica Neue", Arial, sans-serif;
+    font-size:0.95rem;
+    color:var(--text);
+  }
+  .contact-card div strong{
+    display:block;
+    color:var(--muted);
+    font-size:0.75rem;
+    text-transform:uppercase;
+    letter-spacing:0.6px;
+    margin-bottom:4px;
+    font-weight:600;
+  }
+
+  section{
+    margin-top:44px;
+  }
+  section > h2{
+    font-size:1.5rem;
+    color:var(--navy);
+    border-bottom:3px solid var(--accent);
+    display:inline-block;
+    padding-bottom:6px;
+    margin-bottom:18px;
+  }
+  section h3.subhead{
+    font-family:"Helvetica Neue", Arial, sans-serif;
+    text-transform:uppercase;
+    letter-spacing:0.6px;
+    font-size:0.85rem;
+    color:var(--muted);
+    margin:26px 0 10px;
+    font-weight:700;
+  }
+
+  .intro{
+    background:var(--card);
+    border-left:4px solid var(--accent);
+    padding:18px 22px;
+    border-radius:4px;
+    color:var(--text);
+    font-size:1.02rem;
+  }
+
+  .pub-list{
+    list-style:none;
+    margin:0;
+    padding:0;
+  }
+  .pub-list li{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:14px 18px;
+    margin-bottom:10px;
+    font-size:0.97rem;
+  }
+  .pub-list li .title{
+    font-weight:700;
+    color:var(--navy);
+  }
+  .pub-list li .meta{
+    display:block;
+    margin-top:4px;
+    color:var(--muted);
+    font-style:italic;
+    font-size:0.92rem;
+  }
+  .pub-list li .links a{
+    font-family:"Helvetica Neue", Arial, sans-serif;
+    font-size:0.82rem;
+    font-weight:600;
+    margin-right:10px;
+  }
+  .pub-list li .abstract{
+    display:block;
+    margin-top:8px;
+    padding-top:8px;
+    border-top:1px dashed var(--border);
+    color:var(--text);
+    font-style:normal;
+    font-size:0.88rem;
+    line-height:1.55;
+  }
+  .award{
+    display:inline-block;
+    margin-top:6px;
+    background:#fff3cd;
+    color:#7a5b00;
+    border-radius:4px;
+    padding:2px 8px;
+    font-size:0.78rem;
+    font-family:"Helvetica Neue", Arial, sans-serif;
+    font-weight:600;
+  }
+
+  .teaching-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));
+    gap:20px;
+  }
+  .teaching-card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:16px 20px;
+  }
+  .teaching-card h4{
+    margin:0 0 10px;
+    font-family:"Helvetica Neue", Arial, sans-serif;
+    color:var(--accent);
+    font-size:0.8rem;
+    text-transform:uppercase;
+    letter-spacing:0.6px;
+  }
+  .teaching-card ul{
+    margin:0;
+    padding-left:18px;
+  }
+  .teaching-card li{
+    margin-bottom:8px;
+  }
+
+  footer{
+    text-align:center;
+    color:var(--muted);
+    font-family:"Helvetica Neue", Arial, sans-serif;
+    font-size:0.8rem;
+    padding:30px 24px;
+  }
+
+  @media (max-width:600px){
+    .hero-inner{flex-direction:column; text-align:center;}
+    .contact-card{grid-template-columns:1fr;}
+    .hero-text h1{font-size:1.6rem;}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="hero-photo">
+      <a href="https://econ.la.psu.edu/">
+        <img src="AAL_photo.jpg" alt="Andres Aradillas-Lopez, PSU">
+      </a>
+    </div>
+    <div class="hero-text">
+      <h1>Andres Aradillas-Lopez</h1>
+      <h2>Professor of Economics, Penn State University</h2>
+      <a class="cv-btn" href="https://aaradill.github.io/cv_andres_aradillas_lopez.pdf">Curriculum Vitae ↓</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="contact-card">
+    <div>
+      <strong>Office Address</strong>
+      518 Kern Bldg.<br>
+      Department of Economics<br>
+      Penn State University<br>
+      University Park, PA 16802
+    </div>
+    <div>
+      <strong>Email</strong>
+      <a href="mailto:aaradill@psu.edu">aaradill@psu.edu</a>
+    </div>
+    <div>
+      <strong>Phone</strong>
+      814-863-2157
+    </div>
+    <div>
+      <strong>Fax</strong>
+      814-863-4775
+    </div>
+  </div>
+
+  <section id="research">
+    <h2>Research</h2>
+    <p class="intro">Welcome. I perform research in semiparametric microeconometric models, with a special focus on robust inference in strategic interaction models such as games and auctions. My work focuses on identification and inference of these models under weak assumptions concerning their underlying structure (distribution of unobservables, parametric specification of payoffs, etc.) as well as agents' behavior (e.g., allowing for nonequilibrium behavior and bounded rationality). Financial support from the National Science Foundation through Grants SES 0718409/0946894 and SES 0922062 is gratefully acknowledged.</p>
+
+    <h3 class="subhead">Published and Forthcoming Papers</h3>
+    <ul class="pub-list">
+      <li>
+        <span class="title"><a href="https://aaradill.github.io/condit-ineq-functions-paper.pdf">Dimension Reduction and Testing of Functional Inequalities Conditional on Estimated Functions</a></span>
+        <span class="meta">Econometric Reviews, Volume 45, Issue 8, June 2026, pp: 1143-1175</span>
+        <span class="links">
+          <a href="https://aaradill.github.io/condit-ineq-functions-appendix-B.pdf">Appendix B</a>
+          <a href="https://aaradill.github.io/condit-ineq-functions-supplement.pdf">Econometric Supplement</a>
+        </span>
+        <br><span class="award">🏆 Winner of the Esfandiar Maasoumi Award for Best Paper Published in Econometric Reviews in 2026</span>
+        <p class="abstract">A number of economic models produce testable implications in the form of inequalities involving conditional functionals of the distribution of an outcome variable Y conditional on X, a vector of observable covariates. In applications where X includes a large collection of predictors, researchers may wish to pursue dimension reduction and aggregate X into a lower-dimensional, parameterized function g(X,θ), indexed by a finite-dimensional parameter θ, and proceed to test the functional inequalities conditional on g(X,θ̂) instead of X, where θ̂ is a first-step estimator. Motivated by this, we introduce tests for functional inequalities conditional on estimated, aggregate functions of X. Our tests are based on one-sided Cramér–von Mises (CvM) statistics where violations to the inequalities are measured through a tuning parameter converging to zero. Our proposed test-statistics adapt to the properties of the contact sets (the set of values of conditioning variables where the inequalities are binding) and have asymptotically pivotal properties. In Monte Carlo experiments, our procedure displays good power properties, capable of detecting violations to the inequalities that occur with very small probability.</p>
+      </li>
+      <li>
+        <span class="title"><a href="https://aaradill.github.io/solution_robust_estimation_strategic_models.pdf">Solution-robust Estimation of Strategic Models</a></span>
+        <span class="meta">Economics Letters, Vol. 257, 2025, pp: 1-5</span>
+        <p class="abstract">A number of normal-form games with parametric payoff functions have the feature that all solutions can be characterized by a collection of (semi)parametric functions that contain information about the payoff parameters and serve as sufficient statistics. Under additional exclusion restrictions involving selection mechanisms, these games can be expressed as semiparametric multiple index models and payoff parameters can be estimated using existing methods.</p>
+      </li>
+      <li>
+        <span class="title"><a href="https://aaradill.github.io/part-identif-control-functions-paper.pdf">Inference in Models with Partially Identified Control Functions</a></span>
+        <span class="meta">Journal of Econometrics, Volume 238, Issue 1, January 2024, pp: 1-25</span>
+        <span class="links"><a href="https://aaradill.github.io/part-identif-control-functions-appendix.pdf">Online Appendix</a></span>
+        <p class="abstract">In multiple contributions to the literature, James L. Powell and coauthors have developed estimators for semiparametric models where sample selectivity and/or endogeneity can be handled through a "control function". Their methods rely on pairwise comparisons of observations which match (asymptotically) the control functions. Conditional on this matching, a moment condition can identify the parameters of the model. However, there exist instances where the control functions are unobserved, but we have bounds for them which depend on observable covariates. These bounds can arise directly from the nature of the data available (e.g, with interval data), or they can be derived from an economic model. The inability to observe the control functions precludes the matching proposed in Powell's methods. In this paper we show that, under certain conditions, testable implications can still be obtained through pairwise comparisons of observations for which the control-function bounds are disjoint. Testable implications now take the form of pairwise functional inequalities. We propose an inferential procedure based on these pairwise inequalities and we analyze its properties.</p>
+      </li>
+      <li>
+        <span class="title"><a href="https://aaradill.github.io/entry_incumbent_unobserved_market_characteristics_october_2022.pdf">Inference in an Incomplete Information Entry Game with an Incumbent and with Beliefs Conditioned on Unobservable Market Characteristics</a></span>
+        <span class="meta">Econometric Reviews, Vol. 42, No. 2, 2023, pp: 123-156</span>
+        <span class="links"><a href="https://aaradill.github.io/data_code_entry_incumbent.html">Data and Code</a></span>
+        <p class="abstract">We consider a static entry game played between an incumbent and a collection of potential entrants. Entry decisions are made with incomplete information and beliefs are conditioned, at least partially, on a market characteristic that is unobserved by the econometrician. We describe conditions under which, even though the unobserved market characteristic cannot be identified, a subset of parameters of the model can still be identified, including all the strategic-interaction effects. We also characterize testable implications for strategic behavior by the incumbent when this player is able to shift the unobserved market characteristic to deter entry. We present results under Bayesian Nash equilibrium (BNE) and under the weaker behavioral model of iterated elimination of nonrationalizable strategies. Our empirical example analyzes geographic entry decisions in the Mexican internet service provider (ISP) industry. This industry has an incumbent, América Móvil (AMX), which established a widespread geographic presence as a monopolist following the privatization of Telmex in 1990. Our results show significant strategic interaction effects between AMX and its competitors, as well as evidence of strategic behavior by AMX to deter entry and maximize its market share.</p>
+      </li>
+      <li>
+        <span class="title"><a href="https://academic.oup.com/ectj/advance-article/doi/10.1093/ectj/utad001/6969418">A Nonparametric Test for Cooperation in Discrete Games</a></span> (with Lidia Kosenkova)
+        <span class="meta">The Econometrics Journal, Volume 26, Issue 2, May 2023, pp: 257–278</span>
+        <span class="links">
+          <a href="https://aaradill.github.io/testing-for-cooperation-supplement.pdf">Online Supplement</a>
+          <a href="https://aaradill.github.io/testing-for-cooperation-paper.pdf">Working Paper version</a>
+        </span>
+        <p class="abstract">We propose a nonparametric test for cooperative behavior among players in discrete, static games. Assuming that certain exchangeability conditions hold if we match observable characteristics across all players, we obtain testable implications for cooperative behavior when players maximize an unknown, symmetric joint objective function. Cooperation implies the existence of a class of outcomes Y such that, conditional on the matching, the probability of observing an outcome y ∈ Y must be equal to the probability of observing any permutation of y. We present a nonparametric econometric test and we characterize its asymptotic properties. We apply our test to expansion/entry decisions of Lowe's and Home Depot in the contiguous U.S and we find that, while outcomes are consistent with noncooperative behavior in larger markets, we fail to reject cooperation in smaller markets.</p>
+      </li>
+      <li>
+        <span class="title"><a href="https://aaradill.github.io/ordered_game.pdf">Inference in Ordered Response Games with Complete Information</a></span> (with Adam Rosen)
+        <span class="meta">Journal of Econometrics, Vol. 226, No. 2, 2022, pp: 451-476</span>
+        <span class="links">
+          <a href="https://aaradill.github.io/ordered-game-econometric-supplement.pdf">Econometric Supplement</a>
+          <a href="https://aaradill.github.io/ordered-game-empirical-supplement.pdf">Empirical Supplement</a>
+          <a href="https://www.cemmap.ac.uk/publication/inference-in-ordered-response-games-with-complete-information-5/">CEMMAP Working Paper (CWP37/21)</a>
+        </span>
+        <p class="abstract">We study inference in complete information games with discrete strategy spaces. Unlike binary games, we allow for rich strategy spaces and we only assume that they are ordinal in nature. We derive observable implications of equilibrium play under mild shape restrictions on payoff functions, and we characterize sharp identified sets for model parameters. We propose a novel inference method based on a test statistic that embeds conditional moment inequalities implied by equilibrium behavior. Our statistic has asymptotically pivotal properties that depend on the measure of contact sets, to which our statistic adapts automatically. In the case of two players and strategic substitutes we show that certain payoff parameters are point identified under mild conditions. We embed conventional point estimates for these parameters in our conditional moment inequality test statistic in order to perform inference on the remaining (partially identified) parameters. We apply our method to model the number of stores operated by Lowe's and Home Depot in geographic markets and perform inference on several quantities of economic interest.</p>
+      </li>
+      <li>
+        <span class="title"><a href="https://aaradill.github.io/efficiency_bounds_games.pdf">Computing Semiparametric Efficiency Bounds in Discrete Choice Models with Strategic-interactions and Rational Expectations</a></span>
+        <span class="meta">Journal of Econometrics, Vol. 221, No. 1, 2021, pp: 25-42</span>
+        <p class="abstract">This paper computes semiparametric efficiency bounds for finite-dimensional parameters in discrete choice models with nonparametric regressors in the form of conditional expectations. These can include expectations about exogenous events as well as expectations about the choices of other agents. Thus, the models studied here include incomplete-information games, social-interactions models as well as single-agent discrete choice models with uncertainty as special cases. Our bounds rely on the assumption of rational expectations and on regularity conditions of equilibrium beliefs. The paper focuses on binary-choice models but the derivation of the bounds illustrates how our approach can be extended to multinomial choice cases. Explicit efficiency bound expressions for the models examined here had not been derived before. Furthermore, since we also characterize the efficient influence functions, our results can also potentially be used to construct semiparametrically efficient estimators for these models.</p>
+      </li>
+      <li>
+        <span class="title"><a href="https://aaradill.github.io/econometrics_static_games_04_2020.pdf">The Econometrics of Static Games</a></span>
+        <span class="meta">Annual Review of Economics, Vol. 12, 2020, pp: 135-165</span>
+        <p class="abstract">This article reviews the econometrics of static games, with a focus on discrete-choice cases. These models have been used to study a rich variety of empirical problems, ranging from labor force participation to entry decisions. We outline the components of a general game and describe the problem of doing robust inference in the presence of multiple solutions, as well as the different econometric approaches that have been applied to tackle this problem. We then describe the specific challenges that arise in different variations of these models depending on whether players are assumed to have complete or incomplete information, as well as whether or not nonequilibrium play is allowed. We describe the results in 2 × 2 games (the most widely studied games in econometrics), and we present extensions and recent results in games with richer action spaces. Areas for future research are also discussed.</p>
+      </li>
+      <li>
+        <span class="title"><a href="https://aaradill.github.io/efficiency_bounds_linear_models_nonparametric_regressors.pdf">Computing Semiparametric Efficiency Bounds in Linear Models with Nonparametric Regressors</a></span>
+        <span class="meta">Economics Letters, Vol. 185, 2019, pp: 1-5</span>
+        <p class="abstract">We use the computational method proposed by Severini and Tripathi (2001) to obtain semiparametric efficiency bounds in linear models with nonparametric regressors in the form of conditional expectations. Examples include social-interaction models. Explicit efficiency bounds for these models, with the degree of generality assumed here, had not been described before.</p>
+      </li>
+      <li>
+        <span class="title"><a href="https://aaradill.github.io/testable_implications_strategic_interaction_rationalizability.pdf">Nonparametric Tests for Strategic Interaction Effects with Rationalizability</a></span>
+        <span class="meta">Economics Letters, Vol. 181, 2019, pp: 149-153</span>
+        <p class="abstract">We introduce the first nonparametric tests for the presence and the sign of strategic interaction effects in discrete 2×2 games of complete information under the assumption of rationalizable behavior, which includes Nash Equilibrium as a special case but allows for incorrect beliefs. Our tests assume the existence of an observable covariate with a positive stochastic relationship with the payoffs of a particular player.</p>
+      </li>
+      <li>
+        <span class="title"><a href="https://aaradill.github.io/invertible_index_comment_AAL.pdf">Simple Estimators for Invertible Index Models: A Comment</a></span>
+        <span class="meta">Journal of Business and Economic Statistics, Vol. 36, No. 1, 2018, pp: 18-21</span>
+        <p class="abstract">The approach described in Ahn, Ichimura, Powell, and Ruud (2015) constitutes an elegant contribution to the "control function" literature, which focuses on semiparametric models where endogeneity or nonlinearities of unknown form can be captured by a control function. Like the rest of this literature, the applicability of their method presupposes the ability to identify (perhaps nonparametrically) the control function in order to "match" (asymptotically) pairs of observations in a way that identifies the parameters of interest. This comment argues that it is easy to construct examples of microeconometric models where matching is not possible, either because of interval data, missing data, or incomplete models (e.g, structural models with multiple equilibria). It shows that, while matching is not possible and the original methodology cannot be applied, the examples presented produce conditional moment inequalities which can be used to do inference on the parameters of interest using recently developed methods for conditional moment inequalities, demonstrating that control-function models remain powerful vehicles for inference even in partially identified settings.</p>
+      </li>
+      <li>
+        <span class="title"><a href="https://aaradill.github.io/testing_inequalities_published.pdf">A Simple Test for Moment Inequality Models with an Application to English Auctions</a></span> (with Amit Gandhi and Dan Quint)
+        <span class="meta">Journal of Econometrics, Vol. 194, No. 1, 2016, pp: 96-115</span>
+        <span class="links"><a href="https://aaradill.github.io/testing_auctions_supplement.pdf">Appendix Supplement</a></span>
+        <p class="abstract">Testable predictions of many economic models involve inequality comparisons between transformations of nonparametric functionals. We introduce an econometric test for these types of restrictions based on one-sided Lp-statistics that adapt asymptotically to the contact sets without having to directly estimate them. Monte Carlo experiments show that our test is less conservative than procedures based on least-favorable configurations and has power comparable to other contact-set based procedures. As an application, we test for interdependence of bidders' valuations in ascending auctions. Using USFS timber auction data we reject the Independent Private Values model in favor of a model of correlated private values.</p>
+      </li>
+      <li>
+        <span class="title"><a href="https://aaradill.github.io/ordered_published_QE.pdf">Estimation of Games with Ordered Actions: An Application to Chain-Store Entry</a></span> (with Amit Gandhi)
+        <span class="meta">Quantitative Economics, Vol. 7, No. 1, 2016, pp: 727-780</span>
+        <span class="links"><a href="https://aaradill.github.io/MS_465_supplement.pdf">Online Appendix</a></span>
+        <p class="abstract">We study the estimation of static games where players are allowed to have ordered actions, such as the number of stores to enter into a market. Assuming that payoff functions satisfy general shape restrictions, we show that equilibrium of the game implies a covariance restriction between each player's action and a component of the player's payoff function that we call the strategic index. The strategic index captures the direction of strategic interaction (i.e., patterns of substitutability or complementarity) as well as the relative effects of opponents' decisions on players' payoffs. The covariance restriction we derive is robust to the presence of multiple equilibria, and provides a basis for identification and estimation of the strategic index. We introduce an econometric method for inference in our model that exploits the information in moment inequalities in a computationally simple way. We analyze its properties through Monte Carlo experiments and then apply our approach to study entry behavior by chain stores where there is both an intensive margin of entry (how many stores to open in a market) as well as the usual extensive margin of entry (whether to enter a market or not). Using data from retail pharmacies we find evidence of asymmetries in strategic effects among firms in the industry that has implications for merger policy. We also find that business stealing effects are less pronounced in larger markets, which helps explain the large positive correlation in entry behavior observed in the data.</p>
+      </li>
+      <li>
+        <span class="title"><a href="https://aaradill.github.io/auctionpaper.pdf">Identification and Inference in Ascending Auctions with Correlated Private Values</a></span> (with Amit Gandhi and Dan Quint)
+        <span class="meta">Econometrica, Vol. 81, No. 2, 2013, pp. 489-534</span>
+        <span class="links"><a href="https://aaradill.github.io/supplement_auctions_paper.pdf">Online Appendix</a></span>
+        <p class="abstract">We introduce and apply a new nonparametric approach to identification and inference on data from ascending auctions. We exploit variation in the number of bidders across auctions to nonparametrically identify useful bounds on seller profit and bidder surplus using a general model of correlated private values that nests the standard independent private values (IPV) model. We also translate our identified bounds into closed form and asymptotically valid confidence intervals for several economic measures of interest. Applying our methods to much studied U.S. Forest Service timber auctions, we find evidence of correlation among values after controlling for a rich vector of relevant auction covariates; this correlation causes expected profit, the profit-maximizing reserve price, and bidder surplus to be substantially lower than conventional (IPV) analysis of the data would suggest.</p>
+      </li>
+      <li>
+        <span class="title"><a href="https://aaradill.github.io/pwinfo.pdf">Pairwise Difference Estimation of Incomplete Information Games</a></span>
+        <span class="meta">Journal of Econometrics, Vol. 168, No. 1, 2012, pp. 120-140</span>
+        <span class="links"><a href="https://aaradill.github.io/suppl_pwinfo.pdf">Appendix Supplement</a></span>
+        <p class="abstract">This paper contributes to the literature on econometric estimation of incomplete information games with Nash equilibrium behavior by introducing a two-step estimation procedure that makes no parametric assumptions about the distribution of unobservable payoffs shocks. Instead, its asymptotic properties rely on assuming only that these distributions satisfy an invertibility condition, and that the underlying equilibrium selection mechanism is degenerate. Our methodology relies on a pairwise-differencing procedure which, unlike Aradillas-Lopez (2010), does not require computing the equilibria of the game. Furthermore, if normal-form payoffs are linear in the parameters of interest, our procedure results in an estimator with a closed-form expression. We contribute to the pairwise-differencing econometric literature by introducing the first model, where both the control variables being matched and the regressors in the index function parameterized by θ contain nonparametric functions. We describe conditions under which nonparametrically estimated plug-ins yield a √N-consistent and asymptotically normal estimator for the parameter of interest. A consistent specification test based on semiparametric residuals is also developed. It appears to be the first test of this type for a model involving nonparametric or "generated" regressors. Several extensions of our method are also discussed. A series of Monte Carlo experiments are used to investigate the properties of our estimator and our specification test.</p>
+      </li>
+      <li>
+        <span class="title"><a href="https://aaradill.github.io/bounds_ne.pdf">Nonparametric Probability Bounds for Nash Equilibrium Actions in a Simultaneous Discrete Game</a></span>
+        <span class="meta">Quantitative Economics, Vol. 2, No. 2, 2011, pp. 135-171</span>
+        <span class="links">
+          <a href="https://aaradill.github.io/20-147-1-SP.pdf">Appendix Supplement</a>
+          <a href="https://aaradill.github.io/data_QE_2011.html">Data</a>
+        </span>
+        <p class="abstract">We study a simultaneous, complete-information game played by p = 1,…,P agents. Each p has an ordinal decision variable Yp ∈ Ap = {0, 1,…,Mp}, where Mp can be unbounded, Ap is p's action space, and each element in Ap is an action, that is, a potential value for Yp. The collective action space is the Cartesian product A = ∏ Ap. A profile of actions y ∈ A is a Nash equilibrium (NE) profile if y is played with positive probability in some existing NE. Assuming that we observe NE behavior in the data, we characterize bounds for the probability that a prespecified y in A is a NE profile. Comparing the resulting upper bound with Pr[Y = y] (where Y is the observed outcome of the game), we also obtain a lower bound for the probability that the underlying equilibrium selection mechanism chooses a NE where y is played given that such a NE exists. Our bounds are nonparametric, and they rely on shape restrictions on payoff functions and on the assumption that the researcher has ex ante knowledge about the direction of strategic interaction (e.g., that for q ≠ p, higher values of Yq reduce p's payoffs). Our results allow us to investigate whether certain action profiles in A are scarcely observed as outcomes in the data because they are rarely NE profiles or because the selection mechanism rarely selects such NE. Our empirical illustration is a multiple entry game played by Home Depot and Lowe's.</p>
+      </li>
+      <li>
+        <span class="title"><a href="https://aaradill.github.io/spinfo.pdf">Semiparametric Estimation of a Simultaneous Game with Incomplete Information</a></span>
+        <span class="meta">Journal of Econometrics, Vol. 157, No. 2, 2010, pp. 409-431</span>
+        <span class="links"><a href="https://aaradill.github.io/spinfo-appendix-suppl.pdf">Appendix Supplement</a></span>
+        <br><span class="award">🏆 Winner of the 2011 Dennis J. Aigner Award by the Journal of Econometrics</span>
+        <p class="abstract">This paper studies the problem of estimating the normal-form payoff parameters of a simultaneous, discrete game where the realization of such payoffs is not common knowledge. The paper contributes to the existing literature in two ways. First, by making a comparison with the complete information case it formally describes a set of conditions under which allowing for private information in payoffs facilitates the identification of various features of the game. Second, focusing on the incomplete information case it presents an estimation procedure based on the equilibrium properties of the game that relies on weak semiparametric assumptions and relatively flexible information structures which allow players to condition their beliefs on signals whose exact distribution function is unknown to the researcher. The proposed estimators recover unobserved beliefs by solving a semiparametric sample analog of the population Bayesian–Nash equilibrium conditions. The asymptotic features of such estimators are studied for the case in which the distribution of unobserved shocks is known and the case in which it is unknown. In both instances equilibrium uniqueness is assumed to hold only in a neighborhood of the true parameter value and for a subset of realizations of the signals. Multiple equilibria are allowed elsewhere in the parameter space and no equilibrium selection theory is involved. Extensions to games where beliefs are conditioned on unobservables as well as general games with many players and actions are also discussed. An empirical application of a simple capital investment game is included.</p>
+      </li>
+      <li>
+        <span class="title"><a href="https://aaradill.github.io/equilibrium_jbes.pdf">The Identification Power of Equilibrium in Simple Games (with comments and rejoinder)</a></span> (with Elie Tamer)
+        <span class="meta">Journal of Business and Economic Statistics, Vol. 26, No. 3, pp. 261-283</span>
+        <p class="abstract">We examine the identification power that (Nash) equilibrium assumptions play in conducting inference about parameters in some simple games. We focus on three static games in which we drop the Nash equilibrium assumption and instead use rationalizability as the basis for strategic play. The first example examines a bivariate discrete game with complete information of the kind studied in entry models. The second example considers the incomplete-information version of the discrete bivariate game. Finally, the third example considers a first-price auction with independent private values. In each example, we study the inferential question of what can be learned about the parameter of interest using a random sample of observations, under level-k rationality, where k is an integer ≥ 1. As k increases, our identified set shrinks, limiting to the identified set under full rationality or rationalizability (as k → ∞). This is related to the concepts of iterated dominance and higher-order beliefs, which are incorporated into the econometric analysis in our framework. We are then able to categorize what can be learned about the parameters in a model under various maintained levels of rationality, highlighting the roles of different assumptions. We provide constructive identification results that lead naturally to consistent estimators.</p>
+      </li>
+      <li>
+        <span class="title"><a href="https://aaradill.github.io/ahp.pdf">Pairwise Difference Estimation with Nonparametric Control Variables</a></span> (with Bo E. Honore and James L. Powell)
+        <span class="meta">International Economic Review, Vol. 48, No. 4, pp. 1119-1158</span>
+        <p class="abstract">This article extends the pairwise difference estimators for various semilinear limited dependent variable models proposed by Honoré and Powell (2005) to permit the regressor appearing in the nonparametric component to itself depend upon a conditional expectation that is nonparametrically estimated. This permits the estimation approach to be applied to nonlinear models with sample selectivity and/or endogeneity, in which a "control variable" for selectivity or endogeneity is nonparametrically estimated. We develop the relevant asymptotic theory for the proposed estimators and we illustrate the theory to derive the asymptotic distribution of the estimator for the partially linear logit model.</p>
+      </li>
+    </ul>
+
+    <h3 class="subhead">Working Papers and Work in Progress</h3>
+    <ul class="pub-list">
+      <li>
+        <span class="title"><a href="https://aaradill.github.io/estimation_games_uncertain_behavior.pdf">Estimation and Inference in Discrete Games with Uncertain Behavior</a></span>
+        <span class="meta">February, 2026 (under review)</span>
+        <span class="links"><a href="https://aaradill.github.io/econometric_supplement_uncertain_behavior.pdf">Econometric Supplement</a></span>
+      </li>
+      <li>
+        <span class="title">Testing Competition in U.S. Offshore Oil and Gas Lease Auctions</span> (with Phil Haile, Ken Hendricks, Robert Porter and Diwakar Raisingh)
+      </li>
+    </ul>
+
+    <h3 class="subhead">Studies about Mexico (in Spanish)</h3>
+    <ul class="pub-list">
+      <li><span class="title"><a href="https://aaradill.github.io/estudio_cofece_poder_de_mercado_sept_2016.pdf">Estudio del Impacto del Poder de Mercado en el Bienestar de los Hogares Mexicanos</a></span></li>
+      <li><span class="title"><a href="https://aaradill.github.io/impacto_reforma_telecomunicaciones_mexico_febr_2020.pdf">Estudio del Impacto Economico de la Reforma en Telecomunicaciones en Mexico</a></span></li>
+      <li><span class="title"><a href="https://aaradill.github.io/estudio_cuotas_contenido.pdf">Un Analisis del Efecto de Cuotas Minimas de Exhibicion de Peliculas Mexicanas en Salas de Cine y en Plataformas Digitales en Mexico</a></span></li>
+      <li><span class="title"><a href="https://aaradill.github.io/estudio_libertad_tarifaria_telecomunicaciones.pdf">Un Estudio del Impacto de Otorgar Libertad Tarifaria al Agente Económico Preponderante en Telecomunicaciones</a></span></li>
+    </ul>
+  </section>
+
+  <section id="teaching">
+    <h2>Teaching</h2>
+    <div class="teaching-grid">
+      <div class="teaching-card">
+        <h4>Undergraduate</h4>
+        <ul>
+          <li><a href="https://aaradill.github.io/econ402.html">ECON 402 — Decision Making and Strategy in Economics</a></li>
+          <li>ECON 465 — Cross Sectional Econometrics</li>
+        </ul>
+      </div>
+      <div class="teaching-card">
+        <h4>Ph.D.</h4>
+        <ul>
+          <li><a href="https://aaradill.github.io/econ589.html">ECON 589 — Seminar in Econometric Theory (Ph.D.)</a></li>
+          <li>ECON 510 — Econometrics I (Ph.D.)</li>
+        </ul>
+      </div>
+      <div class="teaching-card">
+        <h4>M.A.</h4>
+        <ul>
+          <li>ECON 510 — Econometrics I (M.A.)</li>
+          <li>ECON 530 — Master's Scholarly Essay I</li>
+          <li>ECON 531 — Master's Scholarly Essay II</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<footer>Department of Economics · Penn State University</footer>
+
+<!-- Start of StatCounter Code for Default Guide -->
+<script type="text/javascript">
+var sc_project=9257254;
+var sc_invisible=1;
+var sc_security="ab5324b1";
+var scJsHost = (("https:" == document.location.protocol) ?
+"https://secure." : "http://www.");
+document.write("<sc"+"ript type='text/javascript' src='" +
+scJsHost+
+"statcounter.com/counter/counter.js'></"+"script>");
+</script>
+<noscript>
+<div class="statcounter"><a title="free web stats"
+href="http://statcounter.com/" target="_blank"><img
+class="statcounter"
+src="http://c.statcounter.com/9257254/0/ab5324b1/1/"
+alt="free web stats"></a></div>
+</noscript>
+<!-- End of StatCounter Code for Default Guide -->
+
+</body>
+</html>
